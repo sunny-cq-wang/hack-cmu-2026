@@ -97,7 +97,7 @@ export function AnalyzeSheet({
 
         {items.length === 0 ? (
           <Text style={typography.caption}>
-            Nothing on the plate yet. Add what you ate and PetPlate will price it on the server.
+            Nothing on the plate yet. Add what you ate and Kibble & Kale will price it on the server.
           </Text>
         ) : (
           <View style={styles.items}>

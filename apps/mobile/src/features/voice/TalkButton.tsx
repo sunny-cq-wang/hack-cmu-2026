@@ -24,6 +24,9 @@ export function TalkButton(): React.JSX.Element {
 
   const handleClip = useCallback(
     (clip: RecordedClip) => {
+      // Open the sheet only after the hold ends. A Modal on press-in steals the
+      // responder, fires press-out immediately, and STT gets a silent clip.
+      setSheetOpen(true);
       void turn.send({ audioUri: clip.uri });
     },
     [turn],
@@ -39,9 +42,8 @@ export function TalkButton(): React.JSX.Element {
   const handlePressIn = useCallback(() => {
     setMicError(null);
     // Releases any player still holding the audio session and stops the pet
-    // mid-sentence if the user interrupts.
+    // mid-sentence if the user interrupts. Do not mount the sheet yet.
     turn.reset();
-    setSheetOpen(true);
     mic.press();
   }, [mic, turn]);
 

@@ -24,7 +24,7 @@ export const normalizeVoice = (voice: string | null | undefined): string => {
   return cleaned.length > 0 ? cleaned : config.GROK_DEFAULT_VOICE.toLowerCase();
 };
 
-export async function tts(text: string, voice?: string): Promise<TtsResult | null> {
+export async function tts(text: string, _voice?: string): Promise<TtsResult | null> {
   if (!hasXaiKey()) {
     log.warn('tts skipped: XAI_API_KEY missing');
     return null;
@@ -32,7 +32,9 @@ export async function tts(text: string, voice?: string): Promise<TtsResult | nul
   const body = text.trim();
   if (!body) return null;
 
-  const voiceId = normalizeVoice(voice);
+  // Rex + a British accent until we expose a voice picker. `Ara` is the frozen
+  // shared default and sounds American; ignore it at this boundary.
+  const voiceId = 'rex';
   const startedAt = Date.now();
   try {
     const res = await fetchWithTimeout(
@@ -40,7 +42,7 @@ export async function tts(text: string, voice?: string): Promise<TtsResult | nul
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${config.XAI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, voice_id: voiceId, language: 'en' }),
+        body: JSON.stringify({ text: body, voice_id: voiceId, language: 'en', accent: 'British' }),
       },
       TTS_TIMEOUT_MS,
     );

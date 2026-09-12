@@ -30,7 +30,7 @@ const RECENT_POINTS = 8;
 /** Pull the ideal line into the axis only when it sits this close to the data. */
 const IDEAL_INCLUDE_KG = 0.8;
 
-const DEFAULT_EMPTY_COPY = 'Add a weigh-in weekly and PetPlate will tune the portion automatically.';
+const DEFAULT_EMPTY_COPY = 'Add a weigh-in weekly and Kibble & Kale will tune the portion automatically.';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 

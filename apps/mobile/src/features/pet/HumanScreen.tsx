@@ -117,7 +117,7 @@ export function HumanScreen() {
         idealLabel="Target"
         tint={colors.accentAlt}
         caption={caption}
-        emptyCopy="Log your weight weekly and PetPlate will tune your calorie target automatically."
+        emptyCopy="Log your weight weekly and Kibble & Kale will tune your calorie target automatically."
         accessibilityLabel={`Your weight trend toward ${targetKg} kg.`}
       />
       <Pressable style={styles.secondary} onPress={() => setSheet(true)}>

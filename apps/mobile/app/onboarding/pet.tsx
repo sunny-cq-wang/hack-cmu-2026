@@ -14,7 +14,7 @@ export default function OnboardingPet(): React.JSX.Element {
         <View style={styles.header}>
           <Text style={typography.title}>Your pet</Text>
           <Text style={typography.caption}>
-            No pet at home? Skip and PetPlate gives you Pixel, a virtual one.
+            No pet at home? Skip and Kibble & Kale gives you Pixel, a virtual one.
           </Text>
         </View>
         <PetForm onSaved={() => router.push('/onboarding/avatar')} />

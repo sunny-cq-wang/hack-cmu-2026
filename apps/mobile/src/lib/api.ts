@@ -243,7 +243,7 @@ export async function api<S extends z.ZodTypeAny>(path: string, init: ApiInit<S>
     });
     throw aborted
       ? new ApiError('UPSTREAM_TIMEOUT', `${path} timed out after ${timeoutMs} ms.`, 504)
-      : new ApiError('UPSTREAM_ERROR', `Could not reach the PetPlate API. Check your connection.`, 0);
+      : new ApiError('UPSTREAM_ERROR', `Could not reach the Kibble & Kale API. Check your connection.`, 0);
   } finally {
     clearTimeout(timer);
   }

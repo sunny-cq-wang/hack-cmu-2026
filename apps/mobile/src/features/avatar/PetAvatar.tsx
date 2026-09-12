@@ -26,6 +26,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { AvatarState } from '../../lib/shared';
 import { useToday } from '../../lib/queries';
+import { speakTapLine } from '../voice/tapVoice';
 import { CelebrationVideo } from './CelebrationVideo';
 import { ConfettiOverlay } from './ConfettiOverlay';
 import { PetRive, type PetRiveHandle } from './PetRive';
@@ -43,7 +44,7 @@ const HAPPINESS_MS = 600;
 /** Slack after the bubble starts fading, so it is unmounted only once it is gone. */
 const SPEECH_TEARDOWN_MS = 320;
 /** Ignore a second tap inside this window so mashing does not stutter the pop. */
-const TAP_COOLDOWN_MS = 320;
+const TAP_COOLDOWN_MS = 160;
 
 function SpeciesPlaceholder({
   species,
@@ -172,13 +173,15 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
 
   useEffect(() => clearTimers, [clearTimers]);
 
-  // The voice sheet owns the pet's mouth while it is talking; don't talk over it.
+  // The voice sheet owns the pet's mouth. A tap-started line already has a
+  // bubble on screen — keep it. Only hide when talk starts with no bubble
+  // (push-to-talk).
   useEffect(() => {
-    if (!talking) return;
+    if (!talking || speech) return;
     clearTimers();
     setSpeechVisible(false);
     setSpeech(null);
-  }, [talking, clearTimers]);
+  }, [talking, speech, clearTimers]);
 
   const handlePress = useCallback(() => {
     const now = Date.now();
@@ -192,8 +195,6 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
     // Fire-and-forget: a device with no haptic motor must never break the tap.
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
 
-    if (talking) return;
-
     const text = petSpeech(mood, today?.combined ?? 0, speechIndex.current, today?.pet?.species);
     speechIndex.current += 1;
 
@@ -204,7 +205,8 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
       setTimeout(() => setSpeechVisible(false), SPEECH_VISIBLE_MS),
       setTimeout(() => setSpeech(null), SPEECH_VISIBLE_MS + SPEECH_TEARDOWN_MS),
     );
-  }, [motion, talking, mood, today?.combined, today?.pet?.species, clearTimers]);
+    speakTapLine(text);
+  }, [motion, mood, today?.combined, today?.pet?.species, clearTimers]);
 
   const frontStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
   const species = today?.pet?.species ?? null;
@@ -244,7 +246,7 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
         onPress={handlePress}
         accessibilityRole="button"
         accessibilityLabel="Pet your pet"
-        accessibilityHint="Plays a reaction and a short message"
+        accessibilityHint="Plays a reaction and a short spoken message"
       />
 
       {isLoading && (

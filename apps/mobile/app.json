@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "PetPlate",
+    "name": "Kibble & Kale",
     "slug": "petplate",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -30,19 +30,19 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "PetPlate uses the camera to log meals."
+          "cameraPermission": "Kibble & Kale uses the camera to log meals."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "PetPlate uses your photos for meals and your pet's avatar."
+          "photosPermission": "Kibble & Kale uses your photos for meals and your pet's avatar."
         }
       ],
       [
         "expo-audio",
         {
-          "microphonePermission": "PetPlate uses the microphone so you can talk to your pet."
+          "microphonePermission": "Kibble & Kale uses the microphone so you can talk to your pet."
         }
       ],
       "expo-video",

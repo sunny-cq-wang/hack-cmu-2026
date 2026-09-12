@@ -55,7 +55,7 @@ export function CameraCapture({
     }
     const library = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!library.granted) {
-      onCaptureFailed('PetPlate needs photo access to log a meal from your gallery.');
+      onCaptureFailed('Kibble & Kale needs photo access to log a meal from your gallery.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
@@ -85,7 +85,7 @@ export function CameraCapture({
       <View style={[styles.pane, styles.centered, styles.permission]}>
         <Text style={typography.heading}>Camera access needed</Text>
         <Text style={[typography.caption, styles.permissionCopy]}>
-          PetPlate reads your plate from a photo. You can also pick one from your gallery.
+          Kibble & Kale reads your plate from a photo. You can also pick one from your gallery.
         </Text>
         <Button title="Allow camera" onPress={() => void requestPermission()} fullWidth={false} />
         <Button

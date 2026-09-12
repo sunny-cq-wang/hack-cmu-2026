@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button, colors, spacing, typography } from '../../src/components/ui';
+import { BrandLogo, Button, colors, spacing, typography } from '../../src/components/ui';
 import { useAuth } from '../../src/lib/auth';
 
 export default function Login(): React.JSX.Element {
@@ -28,8 +28,7 @@ export default function Login(): React.JSX.Element {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.hero}>
-        <Text style={styles.logo}>🐾</Text>
-        <Text style={typography.display}>PetPlate</Text>
+        <BrandLogo width={300} />
         <Text style={[typography.body, styles.pitch]}>
           Eat well together — your plate and your pet&apos;s bowl share one daily score.
         </Text>
@@ -63,8 +62,7 @@ export default function Login(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg, padding: spacing.xl, justifyContent: 'space-between' },
-  hero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  logo: { fontSize: 64 },
+  hero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   pitch: { textAlign: 'center', color: colors.textMuted, maxWidth: 300 },
   actions: { gap: spacing.md },
   error: { ...typography.caption, color: colors.drooping, textAlign: 'center' },

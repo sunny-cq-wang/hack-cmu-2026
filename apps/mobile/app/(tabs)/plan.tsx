@@ -132,7 +132,7 @@ export default function PlanTab(): React.JSX.Element {
             <Card>
               <Text style={typography.body}>No plan yet.</Text>
               <Text style={typography.caption}>
-                Generate one and PetPlate will aim tomorrow's meals at the gaps above.
+                Generate one and Kibble & Kale will aim tomorrow's meals at the gaps above.
               </Text>
             </Card>
           ) : null}

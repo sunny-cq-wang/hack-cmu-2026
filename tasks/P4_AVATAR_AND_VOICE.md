@@ -278,3 +278,13 @@ exits non-zero on any failure. **These have not been run yet — `XAI_API_KEY` i
 
 **Shared** — no changes needed. The `voice: 'Ara'` default is wrong for the live API but is
 handled at the `tts.ts` boundary rather than by unfreezing the schema.
+
+## Implementation notes
+
+**Tap-to-talk TTS (2026-09-12).** Tapping the pet still shows the speech bubble and now also
+hits `POST /voice/speak` `{ text }` → Grok TTS (`rex` + `accent: "British"`) → the shared
+`playReply` player. The response reuses `VoiceTurnResponseSchema` so shared stays frozen.
+Device fallback is `expo-speech` with `language: 'en-GB'`. Persona copy is British English.
+How to test: tap the avatar on Home; you should hear Rex in a British accent and see the
+bubble. Push-to-talk still uses `POST /voice/turn` and the same player (they interrupt
+each other).
