@@ -70,30 +70,31 @@ export function nextIdleDelayMs(happiness01: number, random: number): number {
  */
 const LINES_BY_MOOD: Record<AvatarState, readonly string[]> = {
   thriving: [
-    "Let's go for a walk! 🐾",
+    'Fancy a walk, then?',
     'Best day ever. Again.',
-    'You fed us both right today.',
+    'You fed us both properly today.',
     'Treat? No? Fine. Walk?',
     "Keep this up and I'm unbearable.",
   ],
   okay: [
-    "We're halfway to a good day.",
-    "One decent meal and we're golden.",
-    "What's for dinner, then?",
+    "We're halfway to a decent day.",
+    "One proper meal and we're golden.",
+    "What's for supper, then?",
     'I believe in us. Mildly.',
     'Scratch behind the ear? For focus.',
   ],
   drooping: [
-    'I could use a better dinner…',
+    'I could use a better supper…',
     'Rough day. Tomorrow we reset.',
-    'A short walk would fix us both.',
+    'A short walk would sort us both out.',
     'Did we forget a meal? We forgot a meal.',
     'I am not sulking. I am resting.',
   ],
 };
 
 /** Said instead of the mood line when the day is already outstanding. */
-const PERFECT_LINE = "Perfect plate. Chef's kiss. 🐶";
+const PERFECT_LINE_DOG = "Perfect plate. Chef's kiss.";
+const PERFECT_LINE_CAT = "Perfect plate. Chef's kiss.";
 /** Said when the day has barely started, whatever the mood reads as. */
 const EMPTY_DAY_LINE = 'Nothing logged yet — start us off?';
 
@@ -107,8 +108,13 @@ const EMPTY_SCORE = 1;
  * @param score today's combined score, straight from `/me/today`. Only used to pick
  *   which list to read — never recomputed here.
  */
-export function petSpeech(mood: AvatarState, score: number, index: number): string {
-  if (score >= PERFECT_SCORE) return PERFECT_LINE;
+export function petSpeech(
+  mood: AvatarState,
+  score: number,
+  index: number,
+  species?: string | null,
+): string {
+  if (score >= PERFECT_SCORE) return species === 'cat' ? PERFECT_LINE_CAT : PERFECT_LINE_DOG;
   if (score < EMPTY_SCORE) return EMPTY_DAY_LINE;
   const lines = LINES_BY_MOOD[mood];
   const safe = lines.length > 0 ? lines : LINES_BY_MOOD.okay;
@@ -116,4 +122,4 @@ export function petSpeech(mood: AvatarState, score: number, index: number): stri
 }
 
 /** How long a speech bubble stays up before it fades itself out. */
-export const SPEECH_VISIBLE_MS = 2_400;
+export const SPEECH_VISIBLE_MS = 7_200;

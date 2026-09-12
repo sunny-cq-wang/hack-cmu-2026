@@ -28,7 +28,7 @@ export default function Index(): React.JSX.Element {
   if (me.isError) {
     return (
       <View style={styles.centered}>
-        <Text style={typography.heading}>Couldn&apos;t reach PetPlate</Text>
+        <Text style={typography.heading}>Couldn&apos;t reach Kibble & Kale</Text>
         <Text style={[typography.caption, styles.reason]}>{me.error.message}</Text>
         <Button title="Try again" onPress={() => void me.refetch()} fullWidth={false} />
       </View>
@@ -42,7 +42,7 @@ function Booting(): React.JSX.Element {
   return (
     <View style={styles.centered}>
       <ActivityIndicator color={colors.thriving} />
-      <Text style={typography.caption}>Waking up PetPlate…</Text>
+      <Text style={typography.caption}>Waking up Kibble & Kale…</Text>
     </View>
   );
 }

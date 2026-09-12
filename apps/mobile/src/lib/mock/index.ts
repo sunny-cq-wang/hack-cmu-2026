@@ -73,6 +73,16 @@ export async function handleMockRequest(method: string, path: string, rawBody: u
     store.deleteMeal(pathname.slice('/meals/'.length));
     return undefined;
   }
+  if (method === 'GET' && /^\/pets\/[^/]+\/feedings$/.test(pathname)) {
+    return store.listFeedings(params.date ?? null);
+  }
+  if (method === 'DELETE' && /^\/pets\/[^/]+\/feedings\/[^/]+$/.test(pathname)) {
+    store.deleteFeeding(pathname.slice(pathname.lastIndexOf('/') + 1));
+    return undefined;
+  }
+  if (method === 'PUT' && pathname.startsWith('/pets/')) {
+    return store.updatePet(body);
+  }
   if (method === 'GET' && pathname.startsWith('/pets/')) {
     return store.getPet();
   }

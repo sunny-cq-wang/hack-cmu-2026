@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors } from './theme';
+import { isApiError } from '../../lib/api';
 import { useCreateWeighIn } from './queries';
+
+const HUMAN_MIN_KG = 30;
+const HUMAN_MAX_KG = 300;
 
 export function WeighInSheet(props: {
   visible: boolean;
@@ -13,22 +17,46 @@ export function WeighInSheet(props: {
   const create = useCreateWeighIn();
   const [kg, setKg] = useState(true);
   const [value, setValue] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const forHuman = props.subjectType === 'user';
 
   async function submit() {
     const n = Number(value);
-    if (!Number.isFinite(n) || n <= 0) return;
+    if (!Number.isFinite(n) || n <= 0) {
+      setError('Enter a weight greater than 0.');
+      return;
+    }
     const weightKg = kg ? n : n / 2.20462;
-    const res = await create.mutateAsync({ subjectType: props.subjectType, subjectId: props.subjectId, weightKg });
-    props.onMessage?.(res.adjustment.message, res.adjustment.vetFlag ?? false);
+    if (forHuman && (weightKg < HUMAN_MIN_KG || weightKg > HUMAN_MAX_KG)) {
+      setError(`Human weight must be between ${HUMAN_MIN_KG} and ${HUMAN_MAX_KG} kg.`);
+      return;
+    }
+    setError(null);
+    try {
+      const res = await create.mutateAsync({
+        subjectType: props.subjectType,
+        subjectId: props.subjectId,
+        weightKg,
+      });
+      props.onMessage?.(res.adjustment.message, res.adjustment.vetFlag ?? false);
+      props.onClose();
+      setValue('');
+    } catch (err) {
+      setError(isApiError(err) ? err.message : 'Could not save this weigh-in.');
+    }
+  }
+
+  function close() {
+    setError(null);
     props.onClose();
-    setValue('');
   }
 
   return (
-    <Modal visible={props.visible} transparent animationType="slide" onRequestClose={props.onClose}>
-      <Pressable style={styles.backdrop} onPress={props.onClose}>
+    <Modal visible={props.visible} transparent animationType="slide" onRequestClose={close}>
+      <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Dismiss weigh-in" />
         <View style={styles.sheet}>
-          <Text style={styles.title}>Log weigh-in</Text>
+          <Text style={styles.title}>{forHuman ? 'Log your weigh-in' : 'Log pet weigh-in'}</Text>
           <View style={styles.row}>
             <Pressable onPress={() => setKg(true)} style={[styles.chip, kg && styles.chipOn]}>
               <Text style={styles.chipText}>kg</Text>
@@ -39,17 +67,21 @@ export function WeighInSheet(props: {
           </View>
           <TextInput
             value={value}
-            onChangeText={setValue}
+            onChangeText={(next) => {
+              setValue(next);
+              if (error) setError(null);
+            }}
             keyboardType="decimal-pad"
             placeholder={kg ? 'Weight (kg)' : 'Weight (lb)'}
             placeholderTextColor={colors.muted}
             style={styles.input}
           />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
           <Pressable style={styles.btn} onPress={() => void submit()} disabled={create.isPending}>
             <Text style={styles.btnText}>{create.isPending ? 'Saving…' : 'Save'}</Text>
           </Pressable>
         </View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
@@ -65,4 +97,5 @@ const styles = StyleSheet.create({
   input: { backgroundColor: colors.bg, color: colors.text, borderRadius: 10, padding: 12, fontSize: 16 },
   btn: { backgroundColor: colors.thriving, borderRadius: 12, padding: 14, alignItems: 'center' },
   btnText: { color: colors.bg, fontWeight: '700' },
+  error: { color: colors.drooping },
 });

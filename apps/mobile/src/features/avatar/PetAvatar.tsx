@@ -13,6 +13,7 @@
  * and a short line of encouragement drawn from `petPersonality.ts`.
  */
 import * as Haptics from 'expo-haptics';
+import { Cat, Dog, PawPrint } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -25,6 +26,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { AvatarState } from '../../lib/shared';
 import { useToday } from '../../lib/queries';
+import { speakTapLine } from '../voice/tapVoice';
 import { CelebrationVideo } from './CelebrationVideo';
 import { ConfettiOverlay } from './ConfettiOverlay';
 import { PetRive, type PetRiveHandle } from './PetRive';
@@ -36,15 +38,30 @@ import { petSpeech, SPEECH_VISIBLE_MS } from './petPersonality';
 import { useAvatarTalking } from './talkingStore';
 import { authHeadersSync } from './authHeadersSync';
 
-const PLACEHOLDER = require('../../../assets/images/pet-placeholder.png') as number;
-
 const MOOD_FADE_MS = 400;
 const HAPPINESS_MS = 600;
 
 /** Slack after the bubble starts fading, so it is unmounted only once it is gone. */
 const SPEECH_TEARDOWN_MS = 320;
 /** Ignore a second tap inside this window so mashing does not stutter the pop. */
-const TAP_COOLDOWN_MS = 320;
+const TAP_COOLDOWN_MS = 160;
+
+function SpeciesPlaceholder({
+  species,
+  size,
+}: {
+  species: string | null;
+  size: number;
+}): React.JSX.Element {
+  const Icon = species === 'cat' ? Cat : species === 'dog' ? Dog : PawPrint;
+  const label = species === 'cat' ? 'Cat' : species === 'dog' ? 'Dog' : species === 'virtual' ? 'Virtual' : 'Pet';
+  return (
+    <View style={[styles.placeholder, { width: size, height: size }]} accessibilityLabel={`${label} placeholder`}>
+      <Icon size={Math.round(size * 0.36)} color="#98A1B3" strokeWidth={1.6} />
+      <Text style={styles.placeholderLabel}>{label}</Text>
+    </View>
+  );
+}
 
 interface Speech {
   /** Bumped on every tap so the bubble remounts and replays its entrance. */
@@ -62,19 +79,37 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
   const status = avatar?.status;
 
   const imageUrl = imageUrlForMood(avatar, mood);
+  // Same Imagine run → same three URLs. A new photo (or a cleared avatar) changes
+  // this key, and we must not keep the previous bitmap underneath the cutout.
+  const generation = `${avatar?.neutralUrl ?? ''}|${avatar?.thrivingUrl ?? ''}|${avatar?.droopingUrl ?? ''}|${avatar?.status ?? 'none'}`;
 
-  // Two stacked layers so a mood change crossfades instead of popping.
+  // Two stacked layers so a *mood* change crossfades instead of popping.
   const [frontUrl, setFrontUrl] = useState<string | null>(imageUrl);
   const [backUrl, setBackUrl] = useState<string | null>(null);
   const fade = useSharedValue(1);
+  const generationRef = useRef(generation);
+
+  const clearBack = useCallback(() => setBackUrl(null), []);
 
   useEffect(() => {
     if (imageUrl === frontUrl) return;
+    const generationChanged = generation !== generationRef.current;
+    generationRef.current = generation;
+    // New photo, cleared avatar, or first paint: swap in place. Leaving the old
+    // frame as a back-layer shows through sticker cutouts.
+    if (generationChanged || !imageUrl || !frontUrl) {
+      setBackUrl(null);
+      setFrontUrl(imageUrl);
+      fade.value = 1;
+      return;
+    }
     setBackUrl(frontUrl);
     setFrontUrl(imageUrl);
     fade.value = 0;
-    fade.value = withTiming(1, { duration: MOOD_FADE_MS, easing: Easing.inOut(Easing.quad) });
-  }, [imageUrl, frontUrl, fade]);
+    fade.value = withTiming(1, { duration: MOOD_FADE_MS, easing: Easing.inOut(Easing.quad) }, (finished) => {
+      if (finished) runOnJS(clearBack)();
+    });
+  }, [imageUrl, frontUrl, generation, fade, clearBack]);
 
   // Animate happiness and push each frame into Rive when it is enabled.
   const happiness = useSharedValue(happinessFor(mood));
@@ -138,13 +173,15 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
 
   useEffect(() => clearTimers, [clearTimers]);
 
-  // The voice sheet owns the pet's mouth while it is talking; don't talk over it.
+  // The voice sheet owns the pet's mouth. A tap-started line already has a
+  // bubble on screen — keep it. Only hide when talk starts with no bubble
+  // (push-to-talk).
   useEffect(() => {
-    if (!talking) return;
+    if (!talking || speech) return;
     clearTimers();
     setSpeechVisible(false);
     setSpeech(null);
-  }, [talking, clearTimers]);
+  }, [talking, speech, clearTimers]);
 
   const handlePress = useCallback(() => {
     const now = Date.now();
@@ -158,9 +195,7 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
     // Fire-and-forget: a device with no haptic motor must never break the tap.
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
 
-    if (talking) return;
-
-    const text = petSpeech(mood, today?.combined ?? 0, speechIndex.current);
+    const text = petSpeech(mood, today?.combined ?? 0, speechIndex.current, today?.pet?.species);
     speechIndex.current += 1;
 
     clearTimers();
@@ -170,12 +205,11 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
       setTimeout(() => setSpeechVisible(false), SPEECH_VISIBLE_MS),
       setTimeout(() => setSpeech(null), SPEECH_VISIBLE_MS + SPEECH_TEARDOWN_MS),
     );
-  }, [motion, talking, mood, today?.combined, clearTimers]);
+    speakTapLine(text);
+  }, [motion, mood, today?.combined, today?.pet?.species, clearTimers]);
 
   const frontStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
-
-  const source = frontUrl ? { uri: frontUrl, headers: authHeadersSync() } : PLACEHOLDER;
-  const backSource = backUrl ? { uri: backUrl, headers: authHeadersSync() } : PLACEHOLDER;
+  const species = today?.pet?.species ?? null;
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
@@ -185,14 +219,22 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
       />
 
       <Animated.View style={[styles.layer, { width: size, height: size }, motion.bodyStyle]}>
-        {backUrl !== null && (
-          <Image source={backSource} style={[styles.layer, { width: size, height: size }]} resizeMode="contain" />
+        {backUrl ? (
+          <Image
+            source={{ uri: backUrl, headers: authHeadersSync() }}
+            style={[styles.layer, { width: size, height: size }]}
+            resizeMode="contain"
+          />
+        ) : null}
+        {frontUrl ? (
+          <Animated.Image
+            source={{ uri: frontUrl, headers: authHeadersSync() }}
+            style={[styles.layer, { width: size, height: size }, frontStyle]}
+            resizeMode="contain"
+          />
+        ) : (
+          <SpeciesPlaceholder species={species} size={size} />
         )}
-        <Animated.Image
-          source={source}
-          style={[styles.layer, { width: size, height: size }, frontStyle]}
-          resizeMode="contain"
-        />
       </Animated.View>
 
       {HAS_RIVE_ASSET && <PetRive ref={riveRef} size={size} talking={talking} />}
@@ -204,7 +246,7 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
         onPress={handlePress}
         accessibilityRole="button"
         accessibilityLabel="Pet your pet"
-        accessibilityHint="Plays a reaction and a short message"
+        accessibilityHint="Plays a reaction and a short spoken message"
       />
 
       {isLoading && (
@@ -276,5 +318,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  placeholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1A1D24',
+    borderRadius: 999,
+  },
+  placeholderLabel: {
+    color: '#98A1B3',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

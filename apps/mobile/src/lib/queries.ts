@@ -79,7 +79,7 @@ export function useMe(): UseQueryResult<User, Error> {
         method: 'POST',
         body: JSON.stringify({
           timezone: deviceTimezone(),
-          name: currentDisplayName() ?? 'PetPlate user',
+          name: currentDisplayName() ?? 'Kibble & Kale user',
         }),
         schema: UserResponseSchema,
       });

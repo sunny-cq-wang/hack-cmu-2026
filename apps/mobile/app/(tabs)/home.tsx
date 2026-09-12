@@ -11,7 +11,7 @@ import type { TodaySummary } from '@petplate/shared';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button, Card, Skeleton, colors, radius, spacing, typography } from '../../src/components/ui';
+import { BrandLogo, Button, Card, Skeleton, colors, radius, spacing, typography } from '../../src/components/ui';
 import { PetAvatar } from '../../src/features/avatar';
 import { AdjustmentToasts, ScoreRing, StreakBadge, TodayTotals } from '../../src/features/home';
 import { TalkButton } from '../../src/features/voice';
@@ -39,6 +39,8 @@ export default function HomeTab(): React.JSX.Element {
           />
         }
       >
+        <BrandLogo width={220} />
+
         {/* 1 — P4's avatar; it reads `useToday()` itself and owns its own loading state. */}
         <PetAvatar size={AVATAR_SIZE} />
 

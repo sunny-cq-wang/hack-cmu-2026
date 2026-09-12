@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Camera, House, ListChecks, PawPrint } from 'lucide-react-native';
+import { Camera, House, ListChecks, PawPrint, User } from 'lucide-react-native';
 
 import { colors } from '../../src/components/ui';
 
@@ -33,6 +33,13 @@ export default function TabsLayout(): React.JSX.Element {
         options={{
           title: 'Pet',
           tabBarIcon: ({ color, size }) => <PawPrint color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="you"
+        options={{
+          title: 'You',
+          tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
         }}
       />
       <Tabs.Screen

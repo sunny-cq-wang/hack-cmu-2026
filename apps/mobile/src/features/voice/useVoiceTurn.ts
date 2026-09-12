@@ -4,27 +4,15 @@
  * Kept separate from the UI so the audio lifecycle (write cache file → play →
  * clear the avatar's `talking` flag) has one owner and cannot leak.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { File } from 'expo-file-system';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Speech from 'expo-speech';
-import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { VoiceTurnResponseSchema, type VoiceTurnResponse } from '../../lib/shared';
 import { api } from '../../lib/api';
+import { log } from '../../lib/log';
 import { useSetToday } from '../../lib/queries';
-import { avatarTalking } from '../avatar/talkingStore';
-import { enterPlaybackModeAsync } from './audioSession';
+import { playReply, stopReplyAudio } from './playReply';
 
 export type TurnPhase = 'idle' | 'sending' | 'speaking' | 'done' | 'error';
-
-const MIME_EXTENSION: Record<string, string> = {
-  'audio/mpeg': 'mp3',
-  'audio/mp3': 'mp3',
-  'audio/wav': 'wav',
-  'audio/x-wav': 'wav',
-  'audio/mp4': 'm4a',
-  'audio/aac': 'aac',
-};
 
 export interface UseVoiceTurn {
   phase: TurnPhase;
@@ -38,83 +26,13 @@ export function useVoiceTurn(): UseVoiceTurn {
   const [phase, setPhase] = useState<TurnPhase>('idle');
   const [response, setResponse] = useState<VoiceTurnResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const playerRef = useRef<AudioPlayer | null>(null);
   const setToday = useSetToday();
 
-  const stopAudio = useCallback(() => {
-    avatarTalking.set(false);
-    try {
-      playerRef.current?.remove();
-    } catch {
-      /* already released */
-    }
-    playerRef.current = null;
-  }, []);
-
-  // Never leave a player holding the audio session behind — the next recording
-  // has to be able to claim it.
   useEffect(
     () => () => {
-      stopAudio();
-      Speech.stop();
+      stopReplyAudio();
     },
-    [stopAudio],
-  );
-
-  const speak = useCallback(
-    async (turn: VoiceTurnResponse) => {
-      // Release the previous turn's player before this one claims the session.
-      stopAudio();
-      setPhase('speaking');
-      avatarTalking.set(true);
-
-      // Device TTS fallback when the server could not synthesize (INTEGRATIONS §1.4 step 5).
-      if (!turn.audioBase64) {
-        Speech.speak(turn.reply, {
-          onDone: () => {
-            avatarTalking.set(false);
-            setPhase('done');
-          },
-          onStopped: () => {
-            avatarTalking.set(false);
-            setPhase('done');
-          },
-          onError: () => {
-            avatarTalking.set(false);
-            setPhase('done');
-          },
-        });
-        return;
-      }
-
-      try {
-        const ext = MIME_EXTENSION[turn.audioMime ?? 'audio/mpeg'] ?? 'mp3';
-        const path = `${FileSystem.cacheDirectory ?? ''}petplate-reply-${Date.now()}.${ext}`;
-        await FileSystem.writeAsStringAsync(path, turn.audioBase64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-
-        // Hand the session back to playback: iOS otherwise keeps the recorder's
-        // `playAndRecord` category and the reply comes out faint.
-        await enterPlaybackModeAsync();
-
-        const player = createAudioPlayer({ uri: path });
-        playerRef.current = player;
-        player.addListener('playbackStatusUpdate', (status) => {
-          if (status.didJustFinish) {
-            avatarTalking.set(false);
-            setPhase('done');
-          }
-        });
-        player.play();
-      } catch {
-        // Audio failed but we still have the text — read it with the device voice.
-        Speech.speak(turn.reply);
-        avatarTalking.set(false);
-        setPhase('done');
-      }
-    },
-    [stopAudio],
+    [],
   );
 
   const send = useCallback(
@@ -137,6 +55,7 @@ export function useVoiceTurn(): UseVoiceTurn {
           if (!clip.exists || clip.size === 0) {
             throw new Error('That clip was empty — hold the button while you talk, or type it instead.');
           }
+          log.info('voice', 'sending clip', { bytes: clip.size, uri: audioUri });
           form.append('audio', clip as unknown as Blob);
         } else {
           throw new Error('Nothing to send');
@@ -152,22 +71,27 @@ export function useVoiceTurn(): UseVoiceTurn {
         setResponse(turn);
         // Keeps Home in sync when the turn logged a feeding (P4 task file §5).
         setToday(turn.today);
-        await speak(turn);
+        await playReply({
+          audioBase64: turn.audioBase64,
+          audioMime: turn.audioMime,
+          text: turn.reply,
+          onStart: () => setPhase('speaking'),
+          onEnd: () => setPhase('done'),
+        });
       } catch (err) {
         setError((err as Error).message);
         setPhase('error');
       }
     },
-    [setToday, speak],
+    [setToday],
   );
 
   const reset = useCallback(() => {
-    stopAudio();
-    Speech.stop();
+    stopReplyAudio();
     setResponse(null);
     setError(null);
     setPhase('idle');
-  }, [stopAudio]);
+  }, []);
 
   return { phase, response, error, send, reset };
 }
