@@ -1,0 +1,20 @@
+{
+  "name": "mobile",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "@petplate/shared": "workspace:*",
+    "@tanstack/react-query": "^5.71.5",
+    "react": "^19.0.0",
+    "react-native": "^0.79.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.12",
+    "typescript": "^5.8.2"
+  }
+}
