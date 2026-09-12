@@ -105,3 +105,6 @@ userSchema.methods.toApi = function toApi(this: UserDoc): User {
 
 export const UserModel: Model<UserFields> =
   mongoose.models.User ?? mongoose.model<UserFields>('User', userSchema);
+
+/** Short name the P3/P4 routes and services import. */
+export { UserModel as User };

@@ -44,3 +44,6 @@ weighInSchema.methods.toApi = function toApi(this: WeighInDoc): WeighIn {
 
 export const WeighInModel: Model<WeighInFields> =
   mongoose.models.WeighIn ?? mongoose.model<WeighInFields>('WeighIn', weighInSchema);
+
+/** Short name the P3/P4 routes and services import. */
+export { WeighInModel as WeighIn };

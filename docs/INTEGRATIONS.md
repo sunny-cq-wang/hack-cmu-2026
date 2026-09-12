@@ -1,6 +1,8 @@
 # INTEGRATIONS
 
 > Endpoint paths marked **VERIFY** were not confirmed against live docs at planning time. The first thing the owning agent does is open the linked doc page, confirm the path and request shape, and correct this file. Model names are **always** read from env.
+>
+> **§1.3 (Imagine) and §1.4 (Voice) were verified against live docs on 2026-09-12 by P4.** Remaining VERIFY notes in §1.1, §2 and §4 belong to P2 and P4-mobile respectively.
 
 ## 1. xAI / Grok — common client
 
@@ -51,12 +53,16 @@ Use standard OpenAI tool calling. Tools are defined in `services/voice/tools.ts`
 
 ### 1.3 Grok Imagine — `services/imagine/`
 
-Confirmed from xAI docs at planning time:
-- Image generation + editing exists; editing accepts up to 5 reference images; text-to-image is priced per image.
-- Video: `POST https://api.x.ai/v1/videos/generations` with `{ model: GROK_VIDEO_MODEL, prompt, ... }` returns `request_id`; poll `GET https://api.x.ai/v1/videos/{request_id}` until done; result includes a video URL. Image-to-video accepts a still image as reference. Videos up to 15 s; 480p/720p/1080p.
-- Model names seen in docs: `grok-imagine-image`, `grok-imagine-video`. Put them in env; VERIFY current names in the console.
+**VERIFIED 2026-09-12** against https://docs.x.ai/developers/model-capabilities/imagine (P4). Endpoints and model names below are confirmed; models are still read from env.
 
-**VERIFY** the exact image endpoints (likely OpenAI-style `POST /v1/images/generations` and `POST /v1/images/edits` with the reference image — check the Imagine guide's "image editing" section) and whether the response returns a URL or base64. Write `images.ts` so the rest of the pipeline only sees `Promise<Buffer>`.
+- Text-to-image: `POST https://api.x.ai/v1/images/generations`, body `{ model, prompt }`. Up to 10 images per request; aspect ratio, resolution and response format are configurable. Priced flat per image.
+- Image editing: `POST https://api.x.ai/v1/images/edits`, body `{ model, prompt, image: { url, type: "image_url" } }` where `url` is a public URL **or** a base64 data URI (`data:image/jpeg;base64,...`). Multi-image editing accepts up to 5 source images. Billed for both input and output image.
+- Video: `POST https://api.x.ai/v1/videos/generations` with `{ model, prompt, image: { url }, duration }` returns `{ request_id }`; poll `GET https://api.x.ai/v1/videos/{request_id}` until `status === 'done'` (terminal failures are `failed` and `expired`), then read `video.url`. Duration up to 15 s.
+- Confirmed model names: **`grok-imagine-image-2.0`** and **`grok-imagine-video-1.5`** (the older `grok-imagine-image` / `grok-imagine-video` strings are wrong). Read from `GROK_IMAGE_MODEL` / `GROK_VIDEO_MODEL`.
+
+Two things the public docs do **not** pin down, so `images.ts` handles both shapes:
+- The REST field name for multiple references (the multi-image-editing sub-page 404s; the JS AI-SDK uses a plural `images` array). `editImage` sends `images: [...]` and retries once with the single `image` form on a 4xx.
+- Whether the response carries `url` or base64. `images.ts` accepts `data[0].url`, `data[0].b64_json`, or a top-level `url`, and always returns a `Buffer`.
 
 Avatar pipeline (`pipeline.ts`), all steps idempotent and resumable via `pets.avatar.imagineJobs`:
 1. Input: owner photo (Buffer) or, for virtual pets, none.
@@ -76,9 +82,16 @@ Demo mode: skip the API and copy the three pre-generated demo images from `apps/
 
 ### 1.4 Grok Voice — `services/voice/`
 
-Confirmed: xAI offers a Voice Agent API (speech-to-speech over WebSocket at `wss://api.x.ai/v1/realtime`, OpenAI Realtime-compatible, supports tool calling), plus separate TTS and STT APIs with a set of named voices (e.g. `Ara`, `Eve`, `Leo`, `Rex`, `Sal`).
+**VERIFIED 2026-09-12** against https://docs.x.ai/docs/guides/voice (P4). The OpenAI-style `/v1/audio/*` guesses were wrong — the real paths are `/v1/tts` and `/v1/stt`.
 
-**VERIFY** the TTS and STT REST paths in the Voice guide (likely OpenAI-style `POST /v1/audio/speech` and `POST /v1/audio/transcriptions`; the guide is authoritative). Write `stt.ts: (audio: Buffer, mime) => Promise<string>` and `tts.ts: (text, voice) => Promise<{ buffer, mime }>` so callers never see the HTTP details.
+- **TTS**: `POST https://api.x.ai/v1/tts`, JSON body `{ text, voice_id, language }`, returns **raw audio bytes** (MP3 by default), not JSON. Supports inline speech tags and formats from MP3 down to telephony μ-law. A streaming WebSocket variant also exists.
+- **STT**: `POST https://api.x.ai/v1/stt`, **multipart** with field `file`, returns JSON `{ text: string }`. 12 audio formats, word-level timestamps, 25 languages.
+- Neither endpoint takes a `model` parameter, so `GROK_TTS_MODEL` / `GROK_STT_MODEL` were removed from `.env.example`. `GROK_VOICE_MODEL=grok-voice-latest` exists only for the realtime stretch.
+- **Voice IDs are lowercase** and the default is `eve`. `AvatarInfoSchema.voice` in `@petplate/shared` is frozen with default `'Ara'`, so `tts.ts` normalizes with `voice.trim().toLowerCase()` and falls back to `GROK_DEFAULT_VOICE`; shared is not modified.
+- Speech-to-speech realtime is `wss://api.x.ai/v1/realtime?model=grok-voice-latest` with server VAD and tool calling; use ephemeral tokens for client-side connections so the API key is never exposed. Stretch only.
+- Custom voices: `POST /v1/custom-voices` (multipart `file`, max 120 s reference clip) returns a `voice_id` usable anywhere a built-in voice works. Stretch — a cloned owner voice for the pet would be a nice demo beat.
+
+Write `stt.ts: (audio: Buffer, mime) => Promise<string | null>` and `tts.ts: (text, voice) => Promise<{ buffer, mime } | null>` so callers never see the HTTP details.
 
 Push-to-talk flow (`POST /voice/turn`):
 1. STT (timeout 10 s). If `text` was provided, skip.

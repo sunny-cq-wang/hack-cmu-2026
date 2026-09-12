@@ -54,3 +54,6 @@ mealSchema.methods.toApi = function toApi(this: MealDoc): Meal {
 
 export const MealModel: Model<MealFields> =
   mongoose.models.Meal ?? mongoose.model<MealFields>('Meal', mealSchema);
+
+/** Short name the P3/P4 routes and services import. */
+export { MealModel as Meal };

@@ -28,6 +28,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { File } from 'expo-file-system';
+import { useCallback } from 'react';
 
 import { api, LONG_TIMEOUT_MS, qs } from './api';
 import { currentDisplayName, deviceTimezone, useAuth } from './auth';
@@ -96,6 +97,22 @@ export function useToday(): UseQueryResult<TodaySummary, Error> {
     refetchOnWindowFocus: true,
     queryFn: () => api('/me/today', { schema: TodaySummarySchema }),
   });
+}
+
+/**
+ * Writes a fresh `/me/today` payload straight into the cache. A voice turn that
+ * logs a meal or a feeding already returns the recomputed day, so the avatar and
+ * score ring can update without a second round trip.
+ */
+export function useSetToday(): (today: TodaySummary | null | undefined) => void {
+  const client = useQueryClient();
+  return useCallback(
+    (today) => {
+      if (!today) return;
+      client.setQueryData(queryKeys.today, today);
+    },
+    [client],
+  );
 }
 
 /** `GET /meals?date=YYYY-MM-DD` */

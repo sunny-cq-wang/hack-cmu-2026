@@ -9,9 +9,13 @@ export type AppEnv = {
   Variables: {
     userId: string;
     auth0Sub: string;
+    timezone: string;
     user: UserDoc;
   };
 };
+
+/** Alias the P3/P4 routes type their Hono instances with. */
+export type AuthVars = AppEnv;
 
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
@@ -54,6 +58,7 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
       const user = await upsertUser(`dev|${email}`, email, local);
       c.set('userId', user._id.toString());
       c.set('auth0Sub', user.auth0Sub);
+      c.set('timezone', user.timezone);
       c.set('user', user);
       await next();
       return;
@@ -79,6 +84,7 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
     const user = await upsertUser(sub, email, name);
     c.set('userId', user._id.toString());
     c.set('auth0Sub', sub);
+    c.set('timezone', user.timezone);
     c.set('user', user);
     await next();
   } catch (err) {
@@ -87,3 +93,6 @@ export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
     throw new AppError('UNAUTHORIZED', 401, 'Invalid token');
   }
 };
+
+/** P3/P4 routes import this name; same middleware. */
+export const requireAuth = authMiddleware;

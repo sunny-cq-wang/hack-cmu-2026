@@ -127,13 +127,41 @@ function parseOrDrift<S extends z.ZodTypeAny>(
   );
 }
 
+/**
+ * Absolute URL for a server-issued media path. The API hands back `/api/photos/<id>`
+ * from `urlFor()`, which `<Image>` and `expo-video` cannot resolve on their own.
+ */
+export function apiUrl(pathOrUrl: string): string {
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const path = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
+  return path.startsWith('/api/') ? `${config.apiBase}${path}` : `${config.apiBase}/api${path}`;
+}
+
+/**
+ * Last headers `authHeaders()` resolved. `<Image source={{ uri, headers }}>` and
+ * `expo-video` need headers synchronously, but the bearer token only arrives from an
+ * async Auth0 call — so the snapshot is refreshed as a side effect of every request
+ * rather than primed by a separate wiring step that can be forgotten.
+ */
+let lastAuthHeaders: Record<string, string> = config.devUser ? { 'x-dev-user': config.devUser } : {};
+
 export async function authHeaders(): Promise<Record<string, string>> {
   if (config.devUser) {
     // Pairs with DEV_BYPASS_AUTH=true on the API (.env.example).
-    return { 'x-dev-user': config.devUser };
+    lastAuthHeaders = { 'x-dev-user': config.devUser };
+    return lastAuthHeaders;
   }
   const token = await accessTokenProvider?.();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  lastAuthHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+  return lastAuthHeaders;
+}
+
+/**
+ * Synchronous view of `authHeaders()`. Empty until the first request resolves, which
+ * is always well before a server-issued media URL exists to load.
+ */
+export function authHeadersSnapshot(): Record<string, string> {
+  return lastAuthHeaders;
 }
 
 /** Query-string twin of `authHeaders` for `expo-image`, which cannot send custom headers. */
@@ -148,6 +176,19 @@ export function photoAuthQuery(headers: Record<string, string>): string {
   }
   const encoded = params.toString();
   return encoded ? `?${encoded}` : '';
+}
+
+/**
+ * Absolute, credentialed URL for a server-issued media path.
+ *
+ * The photo and video routes require auth, and the image/video views that consume
+ * them are not uniformly able to attach a header — `expo-image` cannot at all, and a
+ * header-only `<Image>` source silently renders nothing when the request 401s. The
+ * API accepts the same credentials as query parameters for exactly this reason
+ * (`devUser` / `access_token`), so put them in the URL and every consumer works.
+ */
+export function mediaUrl(pathOrUrl: string): string {
+  return `${apiUrl(pathOrUrl)}${photoAuthQuery(authHeadersSnapshot())}`;
 }
 
 export async function api<S extends z.ZodTypeAny>(path: string, init: ApiInit<S>): Promise<z.infer<S>> {

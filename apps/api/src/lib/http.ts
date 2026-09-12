@@ -14,3 +14,16 @@ export async function fetchWithTimeout(url: string, init: RequestInit, ms: numbe
     clearTimeout(timer);
   }
 }
+
+/** Read an error body without letting a huge/HTML response flood the logs. */
+export async function readErrorBody(res: Response): Promise<string> {
+  try {
+    return (await res.text()).slice(0, 500);
+  } catch {
+    return '<unreadable body>';
+  }
+}
+
+export function upstreamError(label: string, status: number, body: string): AppError {
+  return new AppError('UPSTREAM_ERROR', 502, `${label} failed (${status}): ${body}`);
+}

@@ -30,13 +30,16 @@ const EnvSchema = z.object({
   AUTH0_DOMAIN: z.string().default('example.us.auth0.com'),
   AUTH0_AUDIENCE: z.string().default('https://api.petplate.app'),
   XAI_API_KEY: z.string().default(''),
+  XAI_BASE_URL: z.string().default('https://api.x.ai/v1'),
   GROK_VISION_MODEL: z.string().default('grok-4.6'),
   GROK_CHAT_MODEL: z.string().default('grok-4.6'),
-  GROK_IMAGE_MODEL: z.string().default('grok-imagine-image'),
-  GROK_VIDEO_MODEL: z.string().default('grok-imagine-video'),
+  GROK_IMAGE_MODEL: z.string().default('grok-imagine-image-2.0'),
+  GROK_VIDEO_MODEL: z.string().default('grok-imagine-video-1.5'),
+  GROK_VOICE_MODEL: z.string().default('grok-voice-latest'),
   GROK_TTS_MODEL: z.string().default(''),
   GROK_STT_MODEL: z.string().default(''),
-  GROK_DEFAULT_VOICE: z.string().default('Ara'),
+  // xAI voice_ids are lowercase and 'eve' is their default (INTEGRATIONS.md §4).
+  GROK_DEFAULT_VOICE: z.string().default('eve'),
   USDA_API_KEY: z.string().default('DEMO_KEY'),
   NUTRITIONIX_APP_ID: z.string().default(''),
   NUTRITIONIX_APP_KEY: z.string().default(''),
@@ -44,4 +47,6 @@ const EnvSchema = z.object({
 
 export const config = EnvSchema.parse(process.env);
 export const isDemo = config.DEMO_MODE;
+export const hasXaiKey = (): boolean => config.XAI_API_KEY.length > 0;
+export const isProd = (): boolean => config.NODE_ENV === 'production';
 export type Config = z.infer<typeof EnvSchema>;

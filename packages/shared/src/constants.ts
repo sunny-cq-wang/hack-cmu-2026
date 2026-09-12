@@ -51,11 +51,16 @@ export const DRI_TABLE = {
 } as const;
 
 /** Age > 50 overrides (ALGORITHMS §1.6). Female iron drops to 8. */
-export const DRI_AGE_OVERRIDES_50 = {
+export const DRI_AGE_OVER_50 = {
   calciumMg: 1200,
   vitaminDUg: 20,
-  ironMgFemale: 8,
+  femaleIronMg: 8,
 } as const;
+
+export const PROTEIN_G_PER_KG = 1.6;
+export const FAT_KCAL_FRACTION = 0.25;
+export const CARBS_FLOOR_G = 50;
+export const ADAPTIVE_OFFSET_CLAMP = 300;
 
 export const MER_FACTORS = {
   dog: {
@@ -74,6 +79,11 @@ export const MER_FACTORS = {
   },
 } as const;
 
+export const PET_LOSE_THRESHOLD = 1.05;
+export const RER_COEFFICIENT = 70;
+export const ADAPTIVE_PCT_CLAMP = 20;
+export const VIRTUAL_PET_KG = 10;
+
 export const PET_WEEKLY_TARGETS = {
   dog: { lose: [-2.0, -0.5] as [number, number] },
   cat: { lose: [-1.0, -0.5] as [number, number] },
@@ -81,16 +91,37 @@ export const PET_WEEKLY_TARGETS = {
 } as const;
 
 export const HUMAN_WEEKLY_TARGETS = {
-  lose: -0.5,
-  maintain: 0,
-  gain: 0.25,
+  loseKg: -0.5,
+  maintainKg: 0,
+  gainKg: 0.25,
+  loseSlowKg: -0.25,
+  loseFastKg: -1.0,
+  maintainAbsKg: 0.4,
+  gainSlowKg: 0.1,
+  gainFastKg: 0.6,
+  offsetStep: 100,
 } as const;
+
+export const ADJUST_COOLDOWN_DAYS = 7;
+export const WEIGHIN_WINDOW_DAYS = 14;
+export const WEIGHIN_MIN_SPAN_DAYS = 5;
+export const PET_SLOW_STEP_PCT = -5;
+export const PET_FAST_STEP_PCT = 10;
+export const PET_MAINTAIN_STEP_PCT = 5;
+export const CAT_VET_FLAG_PCT = -1.0;
 
 export const SCORE_THRESHOLDS = {
   streak: 70,
   thriving: 80,
   okay: 50,
 } as const;
+
+export const HUMAN_KCAL_WEIGHT = 0.9;
+export const PROTEIN_BONUS_MAX = 10;
+export const SCORE_PENALTY_PER_PCT = 2;
+export const MOOD_DAY_START_HOUR = 7;
+export const MOOD_DAY_LENGTH_HOURS = 14;
+export const MOOD_FRAC_FLOOR = 0.15;
 
 export const GAP_THRESHOLD_PCT = 70;
 
