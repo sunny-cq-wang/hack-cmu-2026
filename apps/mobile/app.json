@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "PetPlate",
+    "slug": "petplate",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "petplate",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.petplate.mobile",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "PetPlate needs your microphone so you can talk to your pet.",
+        "NSPhotoLibraryUsageDescription": "PetPlate needs your photo library to turn a photo of your pet into an avatar.",
+        "NSCameraUsageDescription": "PetPlate needs your camera to photograph meals and your pet."
+      }
+    },
+    "android": {
+      "package": "app.petplate.mobile",
+      "permissions": ["android.permission.RECORD_AUDIO"]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PetPlate needs your photo library to turn a photo of your pet into an avatar."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "PetPlate needs your microphone so you can talk to your pet."
+        }
+      ],
+      "expo-video"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
