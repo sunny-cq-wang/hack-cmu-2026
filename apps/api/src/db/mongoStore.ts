@@ -21,6 +21,8 @@ const toUser = (doc: any): UserRecord => ({
   timezone: doc.timezone ?? 'America/New_York',
   onboardingComplete: Boolean(doc.onboardingComplete),
   petId: idStr(doc.petId),
+  profile: doc.profile ?? null,
+  targets: doc.targets ?? null,
 });
 
 const toPet = (doc: any): PetRecord => ({
@@ -188,6 +190,8 @@ export const mongoStore = {
       userId: oid(meal.userId),
       loggedAt: new Date(meal.loggedAt),
       dayKey: meal.dayKey,
+      slot: 'snack',
+      source: 'manual',
       totals: { kcal: meal.kcal, proteinG: meal.proteinG },
     });
     return toMeal(created.toObject());

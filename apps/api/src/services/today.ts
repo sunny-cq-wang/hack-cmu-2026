@@ -1,30 +1,22 @@
 /**
  * `buildToday(userId)` — the /me/today payload.
  *
- * TODO(P2/P3): P2 owns this and P3 owns the scoring services. This implements
- * ALGORITHMS.md §3.1–3.5 directly so P4's avatar and voice flows have real
- * numbers to react to. Replace with `dailyScores` reads + P3's scoring once they
- * land; keep the `buildToday` signature, which voice `tools.ts` depends on.
+ * Reads stored `dailyScores` (AGENTS.md §8). Voice tools depend on
+ * `compactFromToday` / `CompactToday`; the avatar pipeline depends on
+ * `petAvatarToInfo`.
  */
-import {
-  emptyNutrients,
-  TodaySummarySchema,
-  type AvatarInfo,
-  type AvatarState,
-  type TodaySummary,
-} from '@petplate/shared';
-import { store as db } from '../db/connect.js';
-import { dayKey, localHour } from '../lib/day.js';
+import { emptyNutrients, TodaySummarySchema, type AvatarInfo, type TodaySummary } from '@petplate/shared';
+import type { Pet as PetApi } from '@petplate/shared';
+import { User } from '../db/models/user.js';
+import { Pet } from '../db/models/pet.js';
+import { DailyScore } from '../db/models/dailyScore.js';
+import { Meal } from '../db/models/meal.js';
+import { Feeding } from '../db/models/feeding.js';
 import type { PetRecord } from '../db/types.js';
+import { AppError } from '../lib/errors.js';
+import { dayKey } from '../lib/day.js';
+import { callToApi } from '../db/models/serialize.js';
 import { urlFor } from './photos.js';
-
-const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
-const pointScore = (ratio: number): number => clamp(100 - 2 * Math.abs(ratio * 100 - 100), 0, 100);
-const stateFor = (combined: number): AvatarState =>
-  combined >= 80 ? 'thriving' : combined >= 50 ? 'okay' : 'drooping';
-
-// TODO(P2): read from users.targets once the profile flow exists.
-const FALLBACK_HUMAN_TARGETS = { kcal: 2100, proteinG: 130, carbsG: 236, fatG: 58 };
 
 export function petAvatarToInfo(pet: PetRecord | null): AvatarInfo | null {
   if (!pet) return null;
@@ -39,77 +31,73 @@ export function petAvatarToInfo(pet: PetRecord | null): AvatarInfo | null {
 }
 
 export async function buildToday(userId: string): Promise<TodaySummary> {
-  const user = await db.findUserById(userId);
-  const timezone = user?.timezone ?? 'America/New_York';
-  const key = dayKey(new Date(), timezone);
-  const pet = await db.findPetByUserId(userId);
+  const user = await User.findById(userId);
+  if (!user) throw new AppError('NOT_FOUND', 'User not found');
+  if (!user.profile) throw new AppError('ONBOARDING_REQUIRED', 'Complete onboarding first');
 
-  const meals = await db.mealsForDay(userId, key);
-  const consumedKcal = meals.reduce((sum, m) => sum + m.kcal, 0);
-  const consumedProteinG = meals.reduce((sum, m) => sum + m.proteinG, 0);
+  const tz = user.timezone || 'America/New_York';
+  const today = dayKey(new Date(), tz);
+  const score = await DailyScore.findOne({ userId: user._id, dayKey: today });
+  const pet = user.petId ? await Pet.findById(user.petId) : null;
 
+  const userLog = Array.isArray(user.targets?.adjustmentLog) ? user.targets.adjustmentLog : [];
+  const petLog = Array.isArray(pet?.targets?.adjustmentLog) ? pet.targets.adjustmentLog : [];
+  const adjustments = [...userLog, ...petLog]
+    .map((a: { subject: 'user' | 'pet'; message: string; at: Date | string }) => ({
+      subject: a.subject,
+      message: a.message,
+      at: typeof a.at === 'string' ? a.at : new Date(a.at).toISOString(),
+    }))
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, 3);
+
+  const petApi = pet ? callToApi<PetApi>(pet) : null;
+  const mealsLogged = await Meal.countDocuments({ userId: user._id, dayKey: today });
+  const feedingsToday = pet ? await Feeding.countDocuments({ petId: pet._id, dayKey: today }) : 0;
   const consumed = emptyNutrients();
-  consumed.kcal = consumedKcal;
-  consumed.proteinG = consumedProteinG;
+  consumed.kcal = score?.human?.consumedKcal ?? 0;
+  consumed.proteinG = score?.human?.proteinG ?? 0;
 
-  // §3.1 human score
-  const kcalScore = consumedKcal === 0 ? 0 : pointScore(consumedKcal / FALLBACK_HUMAN_TARGETS.kcal);
-  const proteinBonus = Math.min(10, (10 * consumedProteinG) / FALLBACK_HUMAN_TARGETS.proteinG);
-  const humanScore = consumedKcal === 0 ? 0 : Math.round(clamp(kcalScore * 0.9 + proteinBonus, 0, 100));
-
-  // §3.2 pet score
-  const feedings = pet ? await db.feedingsForDay(pet.id, key) : [];
-  const fedGrams = feedings.reduce((sum, f) => sum + f.grams, 0);
-  const fedKcal = feedings.reduce((sum, f) => sum + f.kcal, 0);
-  const targetGrams = pet?.targets?.portionGramsPerDay ?? 0;
-  const targetPetKcal = pet?.targets?.kcal ?? 0;
-  const petScore = !pet || targetGrams <= 0 ? 0 : Math.round(pointScore(fedGrams / targetGrams));
-
-  // §3.3 combined
-  const combined = pet
-    ? Math.round(0.5 * humanScore + 0.5 * petScore)
-    : Math.round(humanScore);
-  const avatarState = stateFor(combined);
-
-  // §3.5 intraday mood
-  const expectedFrac = clamp((localHour(new Date(), timezone) - 7) / 14, 0.15, 1);
-  const pacedHuman = pointScore(consumedKcal / (FALLBACK_HUMAN_TARGETS.kcal * expectedFrac));
-  const pacedPet = !pet || targetGrams <= 0 ? 0 : pointScore(fedGrams / (targetGrams * expectedFrac));
-  const moodCombined = pet ? 0.5 * pacedHuman + 0.5 * pacedPet : pacedHuman;
-  const mood = stateFor(moodCombined);
-
-  const bothAboveThreshold = humanScore >= 70 && petScore >= 70;
-
-  return TodaySummarySchema.parse({
-    dayKey: key,
+  const payload: TodaySummary = {
+    dayKey: today,
     human: {
       consumed,
-      targets: FALLBACK_HUMAN_TARGETS,
-      score: humanScore,
-      mealsLogged: meals.length,
+      targets: {
+        kcal: user.targets?.kcal ?? 0,
+        proteinG: user.targets?.proteinG ?? 0,
+        carbsG: user.targets?.carbsG ?? 0,
+        fatG: user.targets?.fatG ?? 0,
+      },
+      score: score?.human?.score ?? 0,
+      mealsLogged,
     },
-    pet: pet
+    pet: petApi
       ? {
-          petId: pet.id,
-          name: pet.name,
-          species: pet.species,
-          fedGrams,
-          targetGrams,
-          fedKcal,
-          targetKcal: targetPetKcal,
-          feedingsToday: feedings.length,
-          mealsPerDay: pet.mealsPerDay,
-          score: petScore,
+          petId: petApi.id,
+          name: petApi.name,
+          species: petApi.species,
+          fedGrams: score?.pet?.fedGrams ?? 0,
+          targetGrams: score?.pet?.targetGrams ?? petApi.targets.portionGramsPerDay,
+          fedKcal: score?.pet?.fedKcal ?? 0,
+          targetKcal: score?.pet?.targetKcal ?? petApi.targets.kcal,
+          feedingsToday,
+          mealsPerDay: petApi.targets.mealsPerDay,
+          score: score?.pet?.score ?? 0,
         }
       : null,
-    combined,
-    avatarState,
-    mood,
-    // TODO(P3): real streak from dailyScores; today-only until then.
-    streak: { length: bothAboveThreshold ? 1 : 0, todayCounted: bothAboveThreshold, bothAboveThreshold },
-    avatar: petAvatarToInfo(pet),
-    adjustments: [],
-  });
+    combined: score?.combined ?? 0,
+    avatarState: score?.avatarState ?? 'drooping',
+    mood: score?.mood ?? 'drooping',
+    streak: {
+      length: score?.streakLength ?? 0,
+      todayCounted: score?.streakCounted ?? false,
+      bothAboveThreshold: score?.streakCounted ?? false,
+    },
+    avatar: petApi?.avatar ?? null,
+    adjustments,
+  };
+
+  return TodaySummarySchema.parse(payload);
 }
 
 /** Compact context handed to the voice agent (P4 task file §6). */

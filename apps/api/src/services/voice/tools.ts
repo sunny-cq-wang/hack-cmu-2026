@@ -11,7 +11,7 @@ import type { z } from 'zod';
 import { log } from '../../lib/log.js';
 import { buildToday, compactFromToday } from '../today.js';
 import { getGaps } from '../../dev/gaps.js';
-import { logFeeding } from '../../dev/feedings.js';
+import { logFeeding } from '../feedings.js';
 import { suggestMeal } from './suggestMeal.js';
 
 export type VoiceAction = z.infer<typeof VoiceActionSchema>;

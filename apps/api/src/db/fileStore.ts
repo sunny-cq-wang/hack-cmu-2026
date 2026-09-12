@@ -75,6 +75,8 @@ export const fileStore = {
       timezone,
       onboardingComplete: false,
       petId: null,
+      profile: null,
+      targets: null,
     };
     snapshot.users.push(user);
     await flush();

@@ -14,8 +14,8 @@ import { config } from '../config.js';
 import { dayKey } from '../lib/day.js';
 import { buildToday } from '../services/today.js';
 import * as photos from '../services/photos.js';
-import { computePetTargets, goalFor } from './petTargets.js';
-import { logFeeding } from './feedings.js';
+import { computePetTargets } from '../services/targets/pet.js';
+import { computeHumanTargets } from '../services/targets/human.js';
 import { getGaps } from './gaps.js';
 
 export const devRoutes = new Hono<AuthVars>();
@@ -37,27 +37,6 @@ devRoutes.get('/me/today', requireAuth, async (c) => c.json(await buildToday(c.v
 devRoutes.get('/nutrition/gaps', requireAuth, async (c) => {
   const days = Number(c.req.query('days') ?? 7);
   return c.json(await getGaps(c.var.userId, Number.isFinite(days) ? days : 7));
-});
-
-devRoutes.post('/pets', requireAuth, async (c) => {
-  const input = PetInputSchema.parse(await c.req.json());
-  const existing = await db.findPetByUserId(c.var.userId);
-  if (existing) return c.json({ pet: existing }, 200);
-  const pet = await db.createPet({
-    ...input,
-    userId: c.var.userId,
-    goal: goalFor(input),
-    targets: computePetTargets(input),
-    avatar: emptyPetAvatar(config.GROK_DEFAULT_VOICE),
-  });
-  await db.updateUser(c.var.userId, { petId: pet.id, onboardingComplete: true });
-  return c.json({ pet }, 201);
-});
-
-devRoutes.post('/pets/:id/feedings', requireAuth, async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { grams?: number };
-  const result = await logFeeding(c.var.userId, body.grams, 'tap');
-  return c.json({ feeding: { grams: result.grams, kcal: result.kcal }, today: result.today }, 201);
 });
 
 /**
@@ -99,13 +78,31 @@ devRoutes.post('/dev/setup', requireAuth, async (c) => {
     food: { name: 'Blue Buffalo Adult', kcalPerCup: 377, gramsPerCup: 110 },
     mealsPerDay: 2,
   });
+  const computed = computePetTargets(input);
+  const { goal, ...targets } = computed;
   const pet = await db.createPet({
     ...input,
     userId: c.var.userId,
-    goal: goalFor(input),
-    targets: computePetTargets(input),
+    goal,
+    targets,
     avatar: emptyPetAvatar(config.GROK_DEFAULT_VOICE),
   });
-  await db.updateUser(c.var.userId, { petId: pet.id, onboardingComplete: true });
+  const profile = {
+    sex: 'female' as const,
+    age: 28,
+    heightCm: 165,
+    weightKg: 62,
+    activity: 'moderate' as const,
+    goal: 'maintain' as const,
+    targetWeightKg: 62,
+    dietaryPrefs: [],
+    allergies: [],
+  };
+  await db.updateUser(c.var.userId, {
+    petId: pet.id,
+    onboardingComplete: true,
+    profile,
+    targets: computeHumanTargets(profile),
+  });
   return c.json({ pet, created: true }, 201);
 });

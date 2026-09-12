@@ -2,7 +2,7 @@
  * Record shapes shared by both store backends. Mirrors DATA_MODEL.md.
  * TODO(P2): these live here only so P4 can run; fold into P2's models when Atlas lands.
  */
-import type { AvatarInfo, PetInput, PetTargets } from '@petplate/shared';
+import type { AvatarInfo, HumanProfile, HumanTargets, PetInput, PetTargets } from '@petplate/shared';
 
 export type PhotoKind = 'meal' | 'pet_source' | 'avatar';
 
@@ -53,6 +53,8 @@ export interface UserRecord {
   timezone: string;
   onboardingComplete: boolean;
   petId: string | null;
+  profile: HumanProfile | null;
+  targets: HumanTargets | null;
 }
 
 export interface FeedingRecord {
