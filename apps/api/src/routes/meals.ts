@@ -11,6 +11,7 @@ import { MealModel, type MealDoc } from '../db/models';
 import { authMiddleware, type AppEnv } from '../lib/auth';
 import { dayKey, localHour } from '../lib/day';
 import { AppError } from '../lib/errors';
+import { rateLimit } from '../lib/rateLimit';
 import { analyzeMealPhoto } from '../services/grok/vision';
 import { enrichItems, sumNutrients } from '../services/nutrition/enrich';
 import { compressMealJpeg, store } from '../services/photos';
@@ -19,6 +20,7 @@ import { buildToday } from '../services/today';
 
 export const mealRoutes = new Hono<AppEnv>();
 mealRoutes.use('*', authMiddleware);
+mealRoutes.use('*', rateLimit);
 
 function slotFromHour(hour: number): z.infer<typeof MealSlotSchema> {
   if (hour < 10) return 'breakfast';

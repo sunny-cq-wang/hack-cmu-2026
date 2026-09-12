@@ -9,6 +9,7 @@
     "dev": "pnpm -r --parallel dev",
     "typecheck": "pnpm -r exec tsc --noEmit",
     "test": "pnpm -r test",
-    "lint": "echo 'no lint config yet'"
+    "lint": "echo 'no lint config yet'",
+    "build:api": "pnpm --filter @petplate/shared build && pnpm --filter api build"
   }
 }

@@ -4,12 +4,14 @@ import { z } from 'zod';
 import { WeighInModel, type StoredHumanTargets } from '../db/models';
 import { authMiddleware, type AppEnv } from '../lib/auth';
 import { dayKey } from '../lib/day';
+import { rateLimit } from '../lib/rateLimit';
 import { recomputeDay } from '../services/scoring';
 import { computeHumanTargets } from '../services/targets/human';
 import { buildToday } from '../services/today';
 
 export const meRoutes = new Hono<AppEnv>();
 meRoutes.use('*', authMiddleware);
+meRoutes.use('*', rateLimit);
 
 const BootstrapSchema = z.object({
   timezone: z.string().min(1),
