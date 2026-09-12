@@ -40,7 +40,8 @@ export const config = {
 if (missing.length > 0) {
   throw new Error(
     `Missing required env var(s): ${missing.join(', ')}. ` +
-      'Copy .env.example to .env at the repo root and fill them in, then restart Metro with --clear.',
+      'Copy apps/mobile/.env.example to apps/mobile/.env — Expo reads .env from the ' +
+      'Expo project directory, not the repo root — then restart Metro with --clear.',
   );
 }
 
