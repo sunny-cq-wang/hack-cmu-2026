@@ -1,6 +1,18 @@
 /**
- * Onboarding: "Meet your buddy." Uploads the owner's pet photo, kicks off the
- * Imagine pipeline and polls until the three moods exist. Never blocks on video.
+ * "Meet your buddy." Uploads a pet photo, kicks off the Imagine pipeline and polls
+ * until the three moods exist. Never blocks on video.
+ *
+ * Two modes share every line of the picking/polling logic:
+ *  - `onboarding` — the first run. Nothing exists yet, so the server's `progress`
+ *    flags are an exact description of what has landed.
+ *  - `regenerate` — a redraw from a NEW photo, after onboarding. The server keeps
+ *    the previous images on file until each replacement is stored (so Home never
+ *    goes avatar-less, and a failed run changes nothing), which means `progress` is
+ *    already all-true on the first poll. This mode therefore snapshots the URLs it
+ *    started with and calls a mood done only once its URL actually changes.
+ *
+ * `['today']` is invalidated exactly once, when status flips to `ready` — never
+ * mid-run — so the Home avatar swaps straight from the old images to the new ones.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -12,16 +24,17 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { AvatarStatusSchema, type AvatarStatus } from '../../lib/shared';
+import { AvatarStatusSchema, type AvatarInfo, type AvatarStatus } from '../../lib/shared';
 import { api, mediaUrl } from '../../lib/api';
-import { useToday } from '../../lib/queries';
+import { queryKeys, useToday } from '../../lib/queries';
 import { colors, radius } from '../../components/ui';
 import { authHeadersSync } from './authHeadersSync';
 
 const POLL_MS = 3000;
-const PRESETS = ['sticker', 'watercolor', 'pixel'] as const;
+const PRESETS = ['sticker', 'watercolor', 'pixel', 'photoreal'] as const;
 type Preset = (typeof PRESETS)[number];
 
 type Phase = 'picking' | 'submitting' | 'polling' | 'ready' | 'failed';
@@ -32,10 +45,38 @@ const TILES = [
   { key: 'drooping', caption: 'drooping' },
 ] as const;
 
-export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX.Element {
+type TileKey = (typeof TILES)[number]['key'];
+/** The server-relative photo path per mood, as `/avatar/status` and `/me/today` report it. */
+type TilePaths = Record<TileKey, string | null>;
+
+const NO_PATHS: TilePaths = { neutral: null, thriving: null, drooping: null };
+
+const pathsOf = (avatar: AvatarInfo | null | undefined): TilePaths => ({
+  neutral: avatar?.neutralUrl ?? null,
+  thriving: avatar?.thrivingUrl ?? null,
+  drooping: avatar?.droopingUrl ?? null,
+});
+
+export type AvatarGeneratorMode = 'onboarding' | 'regenerate';
+
+export interface AvatarGeneratorProps {
+  /** "Continue" in onboarding, "Done" once a regeneration has landed. */
+  onReady: () => void;
+  mode?: AvatarGeneratorMode;
+  /** Regenerate only: back out without starting (or keeping) anything. */
+  onCancel?: () => void;
+}
+
+export function AvatarGenerator({
+  onReady,
+  mode = 'onboarding',
+  onCancel,
+}: AvatarGeneratorProps): React.JSX.Element {
   const { data: today } = useToday();
+  const queryClient = useQueryClient();
   const petName = today?.pet?.name ?? 'your pet';
   const isVirtual = today?.pet?.species === 'virtual';
+  const isRegenerate = mode === 'regenerate';
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [preset, setPreset] = useState<Preset>('sticker');
@@ -43,6 +84,8 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
   const [status, setStatus] = useState<AvatarStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** URLs on screen when the run started — the "before" half of the diff above. */
+  const baseline = useRef<TilePaths>(NO_PATHS);
 
   const stopPolling = useCallback(() => {
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -73,11 +116,18 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
       setStatus(next);
       if (next.status === 'ready') {
         setPhase('ready');
+        // Only here: every replacement image exists, so Home crossfades old → new
+        // instead of blanking while the pipeline is still mid-run.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.today });
         return;
       }
       if (next.status === 'failed') {
         setPhase('failed');
-        setError('Generation failed');
+        setError(
+          isRegenerate
+            ? `Couldn't draw the new avatar. ${petName} kept the current one.`
+            : 'Generation failed',
+        );
         return;
       }
       pollTimer.current = setTimeout(() => void poll(), POLL_MS);
@@ -85,14 +135,19 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
       setError((err as Error).message);
       pollTimer.current = setTimeout(() => void poll(), POLL_MS);
     }
-  }, []);
+  }, [queryClient, isRegenerate, petName]);
 
   const generate = useCallback(async () => {
     setError(null);
+    // Snapshot before the POST: from here on, "changed" is what marks a mood done.
+    baseline.current = pathsOf(status?.avatar ?? today?.avatar);
     setPhase('submitting');
     try {
       const form = new FormData();
       form.append('stylePreset', preset);
+      // Explicit, so a retry that re-uploads the same file is still a full redraw
+      // rather than a resume of the run that just failed.
+      if (isRegenerate) form.append('regenerate', '1');
       if (photoUri && !isVirtual) {
         // Same constraint as `useAnalyzeMeal`: Expo's WinterCG `fetch` rejects RN's
         // {uri,name,type} descriptor, so hand it a real Blob off disk.
@@ -110,40 +165,85 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
       setPhase('failed');
       setError((err as Error).message);
     }
-  }, [preset, photoUri, isVirtual, poll]);
+  }, [preset, photoUri, isVirtual, isRegenerate, poll, status, today]);
 
   const progress = status?.progress;
-  const avatar = status?.avatar ?? null;
+  // Before the first poll answers there is no `status`; `today` already carries the
+  // avatar that is on screen, which is exactly what regenerate mode wants to show.
+  const paths = pathsOf(status?.avatar ?? today?.avatar);
+  const currentUrl = paths.neutral ? mediaUrl(paths.neutral) : null;
+
   // The API returns server-relative paths ("/api/photos/<id>"), which `<Image>`
   // cannot resolve and which 401 without credentials — either way the tile renders
   // empty. `mediaUrl` makes them absolute and credentialed.
-  const urlFor = (key: (typeof TILES)[number]['key']): string | null => {
-    if (!avatar) return null;
-    const path =
-      key === 'neutral' ? avatar.neutralUrl : key === 'thriving' ? avatar.thrivingUrl : avatar.droopingUrl;
-    return path ? mediaUrl(path) : null;
+  const urlFor = (key: TileKey): string | null => (paths[key] ? mediaUrl(paths[key]) : null);
+
+  const tileDone = (key: TileKey): boolean => {
+    if (!paths[key]) return false;
+    if (!isRegenerate) return progress?.[key] ?? false;
+    // Run is over: whatever is on file is final, whether it is new or the mood the
+    // server kept because its render failed. Never leave a tile spinning forever.
+    if (phase === 'ready' || phase === 'failed') return true;
+    // Mid-run, `progress` is all-true (the previous ids are still set), so the only
+    // honest signal is the id — and therefore the URL — actually changing.
+    return paths[key] !== baseline.current[key];
   };
 
+  const canSubmit = isVirtual || Boolean(photoUri);
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Meet your buddy.</Text>
+    <ScrollView contentContainerStyle={[styles.container, isRegenerate && styles.containerCompact]}>
+      {!isRegenerate && <Text style={styles.title}>Meet your buddy.</Text>}
       <Text style={styles.subtitle}>
-        {isVirtual
-          ? `Grok Imagine will invent three moods of ${petName}.`
-          : `Grok Imagine is drawing three moods of ${petName} from your photo. ~1–2 minutes.`}
+        {isRegenerate
+          ? `A new photo redraws all three moods. ${petName} keeps the current avatar until the new one is ready. ~1–2 minutes.`
+          : isVirtual
+            ? `Grok Imagine will invent three moods of ${petName}.`
+            : `Grok Imagine is drawing three moods of ${petName} from your photo. ~1–2 minutes.`}
       </Text>
 
       {phase === 'picking' && (
         <>
+          {isRegenerate && (
+            <View style={styles.currentRow}>
+              <View style={styles.currentWrap}>
+                <View style={[styles.current, styles.previewEmpty]}>
+                  {currentUrl ? (
+                    <Image
+                      source={{ uri: currentUrl, headers: authHeadersSync() }}
+                      style={styles.tileImage}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <Text style={styles.previewEmptyText}>None yet</Text>
+                  )}
+                </View>
+                <Text style={styles.tileCaption}>now</Text>
+              </View>
+              <Text style={styles.arrow}>→</Text>
+              <View style={styles.currentWrap}>
+                <View style={[styles.current, styles.previewEmpty]}>
+                  {photoUri ? (
+                    <Image source={{ uri: photoUri }} style={styles.tileImage} resizeMode="cover" />
+                  ) : (
+                    <Text style={styles.previewEmptyText}>New photo</Text>
+                  )}
+                </View>
+                <Text style={styles.tileCaption}>next</Text>
+              </View>
+            </View>
+          )}
+
           {!isVirtual && (
             <>
-              {photoUri ? (
-                <Image source={{ uri: photoUri }} style={styles.preview} resizeMode="cover" />
-              ) : (
-                <View style={[styles.preview, styles.previewEmpty]}>
-                  <Text style={styles.previewEmptyText}>No photo yet</Text>
-                </View>
-              )}
+              {!isRegenerate &&
+                (photoUri ? (
+                  <Image source={{ uri: photoUri }} style={styles.preview} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.preview, styles.previewEmpty]}>
+                    <Text style={styles.previewEmptyText}>No photo yet</Text>
+                  </View>
+                ))}
               <View style={styles.row}>
                 <Pressable style={styles.secondary} onPress={() => void pickPhoto(true)}>
                   <Text style={styles.secondaryText}>Take photo</Text>
@@ -169,32 +269,42 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
           </View>
 
           <Pressable
-            style={[styles.primary, !isVirtual && !photoUri && styles.primaryDisabled]}
-            disabled={!isVirtual && !photoUri}
+            style={[styles.primary, !canSubmit && styles.primaryDisabled]}
+            disabled={!canSubmit}
             onPress={() => void generate()}
           >
-            <Text style={styles.primaryText}>{isVirtual ? 'Use a virtual pet' : 'Generate'}</Text>
+            <Text style={styles.primaryText}>
+              {isRegenerate ? 'Redraw avatar' : isVirtual ? 'Use a virtual pet' : 'Generate'}
+            </Text>
           </Pressable>
+
+          {isRegenerate && onCancel && (
+            <Pressable style={styles.secondary} onPress={onCancel}>
+              <Text style={styles.secondaryText}>Cancel</Text>
+            </Pressable>
+          )}
         </>
       )}
 
       {(phase === 'submitting' || phase === 'polling' || phase === 'ready' || phase === 'failed') && (
         <View style={styles.tiles}>
           {TILES.map((tile) => {
-            const done = progress?.[tile.key] ?? false;
+            const done = tileDone(tile.key);
             const url = urlFor(tile.key);
+            // Regenerating: the outgoing image stays under the spinner, dimmed, so
+            // the tile reads as "being replaced" rather than as an empty hole.
+            const showsOld = !done && url !== null && isRegenerate;
             return (
               <View key={tile.key} style={styles.tileWrap}>
                 <View style={styles.tile}>
-                  {done && url ? (
+                  {(done || showsOld) && url ? (
                     <Image
                       source={{ uri: `${url}`, headers: authHeadersSync() }}
-                      style={styles.tileImage}
+                      style={[styles.tileImage, showsOld && styles.tileImageStale]}
                       resizeMode="contain"
                     />
-                  ) : (
-                    <ActivityIndicator size="small" />
-                  )}
+                  ) : null}
+                  {!done && <ActivityIndicator size="small" style={styles.tileSpinner} />}
                 </View>
                 <Text style={styles.tileCaption}>{tile.caption}</Text>
               </View>
@@ -207,7 +317,7 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
 
       {phase === 'ready' && (
         <Pressable style={styles.primary} onPress={onReady}>
-          <Text style={styles.primaryText}>Continue</Text>
+          <Text style={styles.primaryText}>{isRegenerate ? 'Done' : 'Continue'}</Text>
         </Pressable>
       )}
 
@@ -216,8 +326,10 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
           <Pressable style={styles.primary} onPress={() => void generate()}>
             <Text style={styles.primaryText}>Try again</Text>
           </Pressable>
-          <Pressable style={styles.secondary} onPress={onReady}>
-            <Text style={styles.secondaryText}>Continue with a placeholder</Text>
+          <Pressable style={styles.secondary} onPress={onCancel ?? onReady}>
+            <Text style={styles.secondaryText}>
+              {isRegenerate ? 'Keep the current avatar' : 'Continue with a placeholder'}
+            </Text>
           </Pressable>
         </>
       )}
@@ -230,6 +342,8 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
 // inside the dark onboarding shell.
 const styles = StyleSheet.create({
   container: { padding: 24, gap: 14 },
+  // Inside the Pet-tab sheet the surrounding chrome already supplies the padding.
+  containerCompact: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 8 },
   title: { fontSize: 28, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 15, color: colors.textMuted, lineHeight: 21 },
   label: { fontSize: 13, fontWeight: '600', color: colors.textMuted, marginTop: 6 },
@@ -263,6 +377,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tileImage: { width: '100%', height: '100%' },
+  /** The image being replaced: still readable, clearly not the final result. */
+  tileImageStale: { opacity: 0.28 },
+  tileSpinner: { position: 'absolute' },
   tileCaption: { textAlign: 'center', fontSize: 12, color: colors.textMuted },
+  currentRow: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'center' },
+  currentWrap: { gap: 6 },
+  current: {
+    width: 104,
+    height: 104,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  arrow: { color: colors.textFaint, fontSize: 20, marginBottom: 18 },
   error: { color: colors.drooping, fontSize: 13 },
 });

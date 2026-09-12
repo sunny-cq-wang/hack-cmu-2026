@@ -295,6 +295,20 @@ export const MealPlanProposalSchema = z.object({
 });
 export type MealPlanProposal = z.infer<typeof MealPlanProposalSchema>;
 
+/**
+ * Free-text steering the user types for the planner ("include salmon twice").
+ * Untrusted input: it travels as a delimited field inside the user message and is
+ * never concatenated into a system prompt.
+ */
+export const MealPlanInstructions = z.string().trim().max(500);
+
+/** `POST /mealplans/generate` request body. */
+export const MealPlanGenerateRequestSchema = z.object({
+  forDayKey: DayKey.optional(),
+  customInstructions: MealPlanInstructions.optional(),
+});
+export type MealPlanGenerateRequest = z.infer<typeof MealPlanGenerateRequestSchema>;
+
 export const MealPlanSchema = z.object({
   id: Id,
   forDayKey: DayKey,
@@ -307,6 +321,8 @@ export const MealPlanSchema = z.object({
   dayTotals: NutrientsSchema,
   verified: z.boolean(),
   attempts: z.number(),
+  /** What the user asked for, echoed back so the UI can show "Built with: …". */
+  customInstructions: MealPlanInstructions.nullable().default(null),
 });
 export type MealPlan = z.infer<typeof MealPlanSchema>;
 

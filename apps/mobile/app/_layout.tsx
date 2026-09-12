@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { colors } from '../src/components/ui';
+import { GoalReminders } from '../src/features/notifications';
 import { requireAuth0 } from '../src/lib/auth';
 import { config } from '../src/lib/config';
 // Side effect only: registers the in-memory API when EXPO_PUBLIC_MOCK_API=true.
@@ -61,6 +62,12 @@ export default function RootLayout(): React.JSX.Element {
       <SafeAreaProvider>
         <AuthProvider>
           <QueryClientProvider client={queryClient}>
+            {/*
+              Local meal reminders. Renders nothing, asks for permission only after
+              onboarding is complete and `/me/today` has loaded, and no-ops entirely
+              on a dev build that predates `expo-notifications`.
+            */}
+            <GoalReminders />
             <StatusBar style="light" />
             <Stack
               screenOptions={{

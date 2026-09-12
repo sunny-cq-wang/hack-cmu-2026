@@ -4,7 +4,7 @@
  * Kept separate from the UI so the audio lifecycle (write cache file → play →
  * clear the avatar's `talking` flag) has one owner and cannot leak.
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Speech from 'expo-speech';
@@ -13,6 +13,7 @@ import { VoiceTurnResponseSchema, type VoiceTurnResponse } from '../../lib/share
 import { api } from '../../lib/api';
 import { useSetToday } from '../../lib/queries';
 import { avatarTalking } from '../avatar/talkingStore';
+import { enterPlaybackModeAsync } from './audioSession';
 
 export type TurnPhase = 'idle' | 'sending' | 'speaking' | 'done' | 'error';
 
@@ -50,8 +51,20 @@ export function useVoiceTurn(): UseVoiceTurn {
     playerRef.current = null;
   }, []);
 
+  // Never leave a player holding the audio session behind — the next recording
+  // has to be able to claim it.
+  useEffect(
+    () => () => {
+      stopAudio();
+      Speech.stop();
+    },
+    [stopAudio],
+  );
+
   const speak = useCallback(
     async (turn: VoiceTurnResponse) => {
+      // Release the previous turn's player before this one claims the session.
+      stopAudio();
       setPhase('speaking');
       avatarTalking.set(true);
 
@@ -81,6 +94,10 @@ export function useVoiceTurn(): UseVoiceTurn {
           encoding: FileSystem.EncodingType.Base64,
         });
 
+        // Hand the session back to playback: iOS otherwise keeps the recorder's
+        // `playAndRecord` category and the reply comes out faint.
+        await enterPlaybackModeAsync();
+
         const player = createAudioPlayer({ uri: path });
         playerRef.current = player;
         player.addListener('playbackStatusUpdate', (status) => {
@@ -97,7 +114,7 @@ export function useVoiceTurn(): UseVoiceTurn {
         setPhase('done');
       }
     },
-    [],
+    [stopAudio],
   );
 
   const send = useCallback(
@@ -114,7 +131,13 @@ export function useVoiceTurn(): UseVoiceTurn {
           // string, a Blob, or something with `bytes()` — RN's {uri,name,type}
           // descriptor throws "Unsupported FormDataPart implementation", so the turn
           // never left the device. `File` from expo-file-system implements Blob.
-          form.append('audio', new File(audioUri) as unknown as Blob);
+          const clip = new File(audioUri);
+          // A clip the encoder never wrote is a header-only file at best; the
+          // server would just answer "I couldn't hear that" after a round trip.
+          if (!clip.exists || clip.size === 0) {
+            throw new Error('That clip was empty — hold the button while you talk, or type it instead.');
+          }
+          form.append('audio', clip as unknown as Blob);
         } else {
           throw new Error('Nothing to send');
         }

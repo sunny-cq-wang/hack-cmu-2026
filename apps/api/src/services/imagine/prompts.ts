@@ -2,24 +2,49 @@
  * Avatar prompts. Kept pure and separate so they are unit-testable and so the
  * exact wording from INTEGRATIONS §1.3 is auditable in one place.
  */
-export type StylePreset = 'sticker' | 'watercolor' | 'pixel';
+export type StylePreset = 'sticker' | 'watercolor' | 'pixel' | 'photoreal';
 export type AvatarStateKind = 'neutral' | 'thriving' | 'drooping';
 
-export const STYLE_PRESETS: StylePreset[] = ['sticker', 'watercolor', 'pixel'];
+export const STYLE_PRESETS: StylePreset[] = ['sticker', 'watercolor', 'pixel', 'photoreal'];
 
 /**
- * Base wording per preset, from INTEGRATIONS §1.3. The background clause is
- * tightened beyond the doc: `services/imagine/cutout.ts` keys the background out
- * so the avatar can animate transparently over the dashboard, and a flat, evenly
- * lit background is what makes that key reliable.
+ * The background clause every preset shares. `services/imagine/cutout.ts` keys the
+ * background out so the avatar can animate transparently over the dark dashboard,
+ * and a flat, evenly lit, clearly tinted background is what makes that key reliable:
+ * a gradient or vignette breaks the corner-agreement check, a cast shadow leaves a
+ * grey skirt behind the feet, and a white or near-white card sits close enough to a
+ * white outline or a white marking that the fill walks into the character.
+ */
+const KEYABLE_BACKGROUND =
+  'plain background in one flat uniform solid pastel color that is clearly tinted rather than ' +
+  'white or near-white, evenly lit, no gradient, no vignette, no shadow cast on the background, ' +
+  'no text, no watermark.';
+
+/**
+ * Base wording per preset, from INTEGRATIONS §1.3.
+ *
+ * `photoreal` is the odd one out: it asks for a photograph of the animal rather
+ * than an illustration of it, so it has to spell out that the *subject* keeps real
+ * photographic depth (fur detail, shallow depth of field) while the *background*
+ * stays the same flat keyable card the illustrated presets produce. Left implicit,
+ * a "studio portrait" comes back with a lit gradient backdrop the cutout refuses.
  */
 const STYLE_BASE: Record<StylePreset, string> = {
   sticker:
-    'Turn {subject} into a friendly flat-vector sticker mascot, front-facing, centered, full body, bold clean outlines, soft pastel palette, plain background in one flat uniform solid pastel color that is clearly tinted rather than white or near-white, evenly lit, no gradient, no vignette, no shadow cast on the background, no text, no watermark.',
+    'Turn {subject} into a friendly flat-vector sticker mascot, front-facing, centered, full body, ' +
+    `bold clean outlines, soft pastel palette, ${KEYABLE_BACKGROUND}`,
   watercolor:
-    'Turn {subject} into a soft watercolor storybook mascot, front-facing, centered, full body, visible brush texture, gentle washes, plain background in one flat uniform solid pastel color that is clearly tinted rather than white or near-white, evenly lit, no gradient, no vignette, no shadow cast on the background, no text, no watermark.',
+    'Turn {subject} into a soft watercolor storybook mascot, front-facing, centered, full body, ' +
+    `visible brush texture, gentle washes, ${KEYABLE_BACKGROUND}`,
   pixel:
-    'Turn {subject} into a 32-bit pixel-art mascot sprite, front-facing, centered, full body, crisp pixel edges, limited retro palette, plain background in one flat uniform solid pastel color that is clearly tinted rather than white or near-white, evenly lit, no gradient, no vignette, no shadow cast on the background, no text, no watermark.',
+    'Turn {subject} into a 32-bit pixel-art mascot sprite, front-facing, centered, full body, ' +
+    `crisp pixel edges, limited retro palette, ${KEYABLE_BACKGROUND}`,
+  photoreal:
+    'Turn {subject} into a photorealistic studio portrait of the same real animal, not an ' +
+    'illustration and not a stylised render, front-facing, centered, full body, true coat colour ' +
+    'and markings, accurate breed features and body proportions, natural individual fur detail, ' +
+    'soft diffused studio lighting with no harsh highlights, shallow depth of field with sharp ' +
+    `focused eyes, ${KEYABLE_BACKGROUND}`,
 };
 
 const STATE_SUFFIX: Record<AvatarStateKind, string> = {
@@ -30,6 +55,24 @@ const STATE_SUFFIX: Record<AvatarStateKind, string> = {
   drooping:
     'Same character, same style, same framing and scale. Sad droopy expression, ears lowered, ' +
     'slumped posture, small sweat drop.',
+};
+
+/**
+ * Photoreal states, because the shared suffixes are cartoon stage directions. A
+ * "small sweat drop" on a photograph either gets ignored or comes back as a wet
+ * artefact stuck to the fur, and "slight bounce pose" invites motion blur. Real
+ * animal body language carries the same three moods: ears, eyes, head and tail.
+ * The "same ... same framing and scale" invariant is kept verbatim in spirit so
+ * the three states still compose identically in `PetAvatar`.
+ */
+const PHOTOREAL_STATE_SUFFIX: Record<AvatarStateKind, string> = {
+  neutral: 'Neutral relaxed expression, sitting, facing forward, ears in their natural resting position.',
+  thriving:
+    'Same animal, same photographic style, same framing and scale. Bright alert eyes, ears up and ' +
+    'forward, relaxed open-mouth happy pant, tail raised, standing tall and energetic.',
+  drooping:
+    'Same animal, same photographic style, same framing and scale. Tired half-closed eyes, ears ' +
+    'back and flattened, head lowered, tail down, slack low posture.',
 };
 
 /**
@@ -47,10 +90,36 @@ export const CONSISTENCY_PREFIX =
   'and accessories. Keep the identical art style, line weight, outline and colour palette. ' +
   'Change only the facial expression and body pose described below. ';
 
+/**
+ * Stronger prefix for photoreal, where drift is far more visible. A sticker is
+ * forgiving — two drawings of "a tan dog" still read as the same mascot — but two
+ * photographs of two different tan dogs read as two different pets, which is the
+ * one thing this feature must not do. So the invariants are enumerated down to the
+ * camera, and "art style, line weight, outline and colour palette" is replaced by
+ * the photographic properties those words do not cover.
+ */
+export const PHOTOREAL_CONSISTENCY_PREFIX =
+  'This must be unmistakably the same individual animal as the reference photograph: identical ' +
+  'breed, head shape, muzzle length, ear shape and position, eye shape and eye colour, coat ' +
+  'colour, coat length and every marking in the same place, and the same collar, clothing and ' +
+  'accessories. Keep the identical photographic treatment: same camera angle and distance, same ' +
+  'lens and depth of field, same soft studio lighting, and the same flat background colour. Do ' +
+  'not stylise, illustrate or idealise the animal, and do not substitute a different animal. ' +
+  'Change only the facial expression and body pose described below. ';
+
 export const CELEBRATION_VIDEO_PROMPT =
   'The mascot does a short joyful happy dance, confetti falls, looping-friendly, 5 seconds';
 
 export const CELEBRATION_VIDEO_SECONDS = 5;
+
+/** Presets arrive from an HTTP field, so an unexpected value must not blank the prompt. */
+const resolve = (preset: StylePreset): StylePreset =>
+  STYLE_BASE[preset] === undefined ? 'sticker' : preset;
+
+/** The identity prefix a preset's derived states are rendered with. */
+export function consistencyPrefix(preset: StylePreset): string {
+  return resolve(preset) === 'photoreal' ? PHOTOREAL_CONSISTENCY_PREFIX : CONSISTENCY_PREFIX;
+}
 
 /**
  * `description` is only used for virtual pets (no source photo), where "this pet"
@@ -58,7 +127,7 @@ export const CELEBRATION_VIDEO_SECONDS = 5;
  */
 export function stylePrompt(preset: StylePreset, description: string | null): string {
   const subject = description ? `a ${description}` : 'this pet';
-  const base = (STYLE_BASE[preset] ?? STYLE_BASE.sticker).replace('{subject}', subject);
+  const base = STYLE_BASE[resolve(preset)].replace('{subject}', subject);
   return `${base} Keep the pet's real coat colors and markings.`;
 }
 
@@ -68,8 +137,10 @@ export function statePrompt(
   state: AvatarStateKind,
   withConsistencyPrefix: boolean,
 ): string {
-  const body = `${stylePrompt(preset, description)} ${STATE_SUFFIX[state]}`;
-  return withConsistencyPrefix ? `${CONSISTENCY_PREFIX}${body}` : body;
+  const resolved = resolve(preset);
+  const suffix = resolved === 'photoreal' ? PHOTOREAL_STATE_SUFFIX[state] : STATE_SUFFIX[state];
+  const body = `${stylePrompt(resolved, description)} ${suffix}`;
+  return withConsistencyPrefix ? `${consistencyPrefix(resolved)}${body}` : body;
 }
 
 /** Free-text describing a virtual pet, used in place of a photo. */

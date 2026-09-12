@@ -54,13 +54,18 @@ export function PetScreen() {
     pet.goal === 'lose'
       ? `RER of ideal weight × ${pet.targets.merFactor} (weight-loss factor)`
       : `RER of current weight × ${pet.targets.merFactor}`;
-  const slope = petWeigh.data?.trend.slopeKgPerWeek;
-  const goalDate = petWeigh.data?.trend.projectedGoalDate;
-  const caption =
-    slope != null
-      ? `${slope.toFixed(2)} kg/week${goalDate ? ` · goal ≈ ${goalDate}` : ''}`
-      : undefined;
+  const trendCaption = (trend: { slopeKgPerWeek: number | null; projectedGoalDate: string | null } | undefined) => {
+    if (trend?.slopeKgPerWeek == null) return undefined;
+    const goal = trend.projectedGoalDate ? ` · goal ≈ ${trend.projectedGoalDate}` : '';
+    return `${trend.slopeKgPerWeek.toFixed(2)} kg/week${goal}`;
+  };
+  const caption = trendCaption(petWeigh.data?.trend);
+  const userCaption = trendCaption(userWeigh.data?.trend);
   const latestUser = userWeigh.data?.weighIns[0];
+  // `profile.targetWeightKg` is nullable; fall back to the latest weigh-in so the
+  // reference line always has something sensible to sit on.
+  const userTargetKg =
+    meQ.data?.profile?.targetWeightKg ?? meQ.data?.profile?.weightKg ?? latestUser?.weightKg ?? 0;
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
@@ -81,14 +86,32 @@ export function PetScreen() {
           <Pressable style={styles.secondary} onPress={() => setPetSheet(true)}>
             <Text style={styles.secondaryText}>Log pet weigh-in</Text>
           </Pressable>
-          <WeightChart trend={petWeigh.data?.trend} idealWeightKg={pet.idealWeightKg} caption={caption} />
+          <WeightChart
+            trend={petWeigh.data?.trend}
+            weighIns={petWeigh.data?.weighIns}
+            idealWeightKg={pet.idealWeightKg}
+            caption={caption}
+            accessibilityLabel={`${pet.name}'s weight trend toward ${pet.idealWeightKg} kg.`}
+          />
         </>
       ) : (
         <Text style={styles.muted}>Virtual pets skip weigh-ins — the 10 kg profile stays fixed.</Text>
       )}
       <View style={styles.card}>
-        <Text style={styles.section}>Your weight</Text>
-        <Text style={styles.muted}>{latestUser ? `${latestUser.weightKg} kg` : 'No weigh-ins yet'}</Text>
+        <View style={styles.cardHead}>
+          <Text style={styles.section}>Your weight</Text>
+          <Text style={styles.muted}>{latestUser ? `${latestUser.weightKg} kg` : 'No weigh-ins yet'}</Text>
+        </View>
+        <WeightChart
+          trend={userWeigh.data?.trend}
+          weighIns={userWeigh.data?.weighIns}
+          idealWeightKg={userTargetKg}
+          idealLabel="Target"
+          tint={colors.accentAlt}
+          caption={userCaption}
+          emptyCopy="Log your weight weekly and PetPlate will tune your calorie target automatically."
+          accessibilityLabel={`Your weight trend toward ${userTargetKg} kg.`}
+        />
         <Pressable onPress={() => setUserSheet(true)}>
           <Text style={styles.link}>Log weigh-in</Text>
         </Pressable>
@@ -127,7 +150,9 @@ export function PetScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 20, gap: 16, backgroundColor: colors.bg, paddingBottom: 48 },
+  // Clears the Pet tab's floating "New photo" pill (app/(tabs)/pet.tsx), which
+  // otherwise covers the last rows of a fully scrolled page.
+  page: { padding: 20, gap: 16, backgroundColor: colors.bg, paddingBottom: 112 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg, gap: 8 },
   header: { gap: 8 },
   name: { color: colors.text, fontSize: 32, fontWeight: '700' },
@@ -136,7 +161,8 @@ const styles = StyleSheet.create({
   link: { color: colors.accent },
   secondary: { borderWidth: 1, borderColor: colors.accent, borderRadius: 12, padding: 12, alignItems: 'center' },
   secondaryText: { color: colors.accent, fontWeight: '600' },
-  card: { backgroundColor: colors.card, borderRadius: 12, padding: 16, gap: 6 },
+  card: { backgroundColor: colors.card, borderRadius: 12, padding: 16, gap: 10 },
+  cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   section: { color: colors.text, fontWeight: '600' },
   muted: { color: colors.muted },
   footer: { color: colors.muted, fontSize: 12, lineHeight: 18 },

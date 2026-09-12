@@ -7,6 +7,12 @@
  *    success, so an API restart mid-run does not redo finished states.
  *  - Never throws out of the detached promise.
  *  - One image is enough for `ready`; the UI falls back to neutral for the rest.
+ *
+ * `{ regenerate: true }` is the one escape hatch from the resume rule: it re-renders
+ * all three moods from the new source photo. It deliberately does NOT blank the
+ * stored ids up front — each mood's reference is swapped only once its replacement
+ * is in the photo store, so Home keeps showing the old avatar for the whole run and
+ * a failed regeneration leaves the pet exactly as it was.
  */
 import { AvatarStatusSchema, type AvatarStatus } from '@petplate/shared';
 import { store as db } from '../../db/connect';
@@ -150,11 +156,23 @@ async function rehostVideo(userId: string, url: string): Promise<string> {
   }
 }
 
+export interface StartAvatarPipelineOptions {
+  /**
+   * Re-render every mood instead of resuming. Existing photo ids are kept until
+   * their replacement is stored, so nothing 404s mid-transition and a total
+   * failure leaves the previous avatar in place.
+   */
+  regenerate?: boolean;
+}
+
 export async function startAvatarPipeline(
   petId: string,
   source: Buffer | null,
   preset: StylePreset,
+  options: StartAvatarPipelineOptions = {},
 ): Promise<void> {
+  const regenerate = options.regenerate === true;
+
   if (running.has(petId)) {
     log.info({ petId }, 'avatar pipeline already running — ignoring duplicate start');
     return;
@@ -174,13 +192,19 @@ export async function startAvatarPipeline(
       stylePrompt: stylePrompt(preset, description),
     });
 
-    // Resume: reuse whatever a previous run already finished.
-    let neutralBuf = await loadBuffer(pet.avatar.neutralPhotoId);
-    let produced = [pet.avatar.neutralPhotoId, pet.avatar.thrivingPhotoId, pet.avatar.droopingPhotoId].filter(
-      Boolean,
-    ).length;
+    const hadImages = Boolean(
+      pet.avatar.neutralPhotoId ?? pet.avatar.thrivingPhotoId ?? pet.avatar.droopingPhotoId,
+    );
 
-    if (!pet.avatar.neutralPhotoId) {
+    // Resume: reuse whatever a previous run already finished. A regenerate run
+    // ignores that — the point is to redraw every mood from the new photo — and it
+    // never anchors on the old neutral, which was drawn from the old source.
+    let neutralBuf = regenerate ? null : await loadBuffer(pet.avatar.neutralPhotoId);
+    let produced = regenerate
+      ? 0
+      : [pet.avatar.neutralPhotoId, pet.avatar.thrivingPhotoId, pet.avatar.droopingPhotoId].filter(Boolean).length;
+
+    if (regenerate || !pet.avatar.neutralPhotoId) {
       const id = await renderState(pet, preset, 'neutral', source, null);
       if (id) {
         produced += 1;
@@ -189,23 +213,34 @@ export async function startAvatarPipeline(
     }
 
     for (const state of ['thriving', 'drooping'] as const) {
-      if (pet.avatar[PHOTO_ID_FIELD[state]]) continue;
+      if (!regenerate && pet.avatar[PHOTO_ID_FIELD[state]]) continue;
       const id = await renderState(pet, preset, state, source, neutralBuf);
       if (id) produced += 1;
     }
 
+    // A regenerate run that produced nothing is a failure worth surfacing even
+    // though the old images are still on file — they stay renderable either way.
     await db.patchPetAvatar(petId, { status: produced > 0 ? 'ready' : 'failed' });
-    log.info({ petId, produced }, 'avatar images finished');
+    log.info({ petId, produced, regenerate, keptPrevious: regenerate && produced === 0 && hadImages }, 'avatar images finished');
 
     if (produced === 0) return;
 
     const refreshed = await db.findPetById(petId);
     const thrivingBuf =
       (await loadBuffer(refreshed?.avatar.thrivingPhotoId ?? null)) ?? neutralBuf;
-    if (thrivingBuf && !refreshed?.avatar.celebrationVideoUrl) {
-      // Detached on purpose: the avatar is already usable.
-      void runVideoStep(petId, thrivingBuf);
+    if (!thrivingBuf) return;
+
+    if (regenerate && refreshed?.avatar.celebrationVideoUrl) {
+      // Drop the stale celebration only now that new mood images exist. The blob
+      // itself stays in the photo store, so a celebration already on screen when
+      // this lands keeps playing instead of 404ing.
+      await db.patchPetAvatar(petId, { celebrationVideoUrl: null });
+    } else if (refreshed?.avatar.celebrationVideoUrl) {
+      return;
     }
+
+    // Detached on purpose: the avatar is already usable.
+    void runVideoStep(petId, thrivingBuf);
   } catch (err) {
     // The promise is fire-and-forget; nothing can catch a throw from here.
     log.error({ petId, err: (err as Error).message }, 'avatar pipeline crashed');

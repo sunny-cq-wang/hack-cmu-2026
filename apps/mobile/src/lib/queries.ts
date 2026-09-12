@@ -10,6 +10,7 @@ import {
   HumanProfileSchema,
   MealCreateSchema,
   MealDraftSchema,
+  MealPlanGenerateRequestSchema,
   PetInputSchema,
   TodaySummarySchema,
   type GapsResponse,
@@ -212,13 +213,29 @@ export function useDeleteMeal(): UseMutationResult<void, Error, string> {
   });
 }
 
-/** `POST /mealplans/generate` — Grok + USDA, so it gets the 40 s budget. */
-export function useGeneratePlan(): UseMutationResult<MealPlan, Error, { forDayKey?: string } | void> {
+/**
+ * `POST /mealplans/generate` — Grok + USDA, so it gets the 40 s budget.
+ *
+ * `customInstructions` is free text the user typed ("include salmon twice"). The server
+ * stores it on the plan and treats a change as a cache miss, so no `force` flag is needed
+ * when only the instructions changed.
+ */
+export function useGeneratePlan(): UseMutationResult<
+  MealPlan,
+  Error,
+  { forDayKey?: string; customInstructions?: string } | void
+> {
   return useMutation({
-    mutationFn: async (input: { forDayKey?: string } | void) => {
+    mutationFn: async (input: { forDayKey?: string; customInstructions?: string } | void) => {
+      const instructions = input?.customInstructions?.trim();
       const res = await api('/mealplans/generate', {
         method: 'POST',
-        body: JSON.stringify(input ?? {}),
+        body: JSON.stringify(
+          MealPlanGenerateRequestSchema.parse({
+            forDayKey: input?.forDayKey,
+            customInstructions: instructions?.length ? instructions : undefined,
+          }),
+        ),
         timeoutMs: LONG_TIMEOUT_MS,
         schema: MealPlanResponseSchema,
       });
