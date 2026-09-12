@@ -2,7 +2,7 @@
  * Avatar helpers: mood → image/happiness mapping and authenticated photo fetch.
  */
 import type { AvatarInfo, AvatarState, TodaySummary } from '../../lib/shared';
-import { apiUrl, authHeaders } from '../../lib/api';
+import { authHeaders, mediaUrl } from '../../lib/api';
 
 /** INTEGRATIONS §4: thriving → 92, okay → 65, drooping → 20. */
 export const HAPPINESS_BY_MOOD: Record<AvatarState, number> = {
@@ -26,7 +26,7 @@ export function imageUrlForMood(avatar: AvatarInfo | null | undefined, mood: Ava
   };
   const chosen = byMood[mood] ?? avatar.neutralUrl;
   const resolved = chosen ?? avatar.neutralUrl;
-  return resolved ? apiUrl(resolved) : null;
+  return resolved ? mediaUrl(resolved) : null;
 }
 
 /** Photo routes require auth, so RN's `<Image source={{ uri }}>` needs the header too. */

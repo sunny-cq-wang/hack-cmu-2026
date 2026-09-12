@@ -5,6 +5,7 @@
  * clear the avatar's `talking` flag) has one owner and cannot leak.
  */
 import { useCallback, useRef, useState } from 'react';
+import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Speech from 'expo-speech';
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
@@ -109,7 +110,11 @@ export function useVoiceTurn(): UseVoiceTurn {
         if (text?.trim()) {
           form.append('text', text.trim());
         } else if (audioUri) {
-          form.append('audio', { uri: audioUri, name: 'turn.m4a', type: 'audio/m4a' } as unknown as Blob);
+          // why: Expo's WinterCG `fetch` encodes multipart itself and accepts only a
+          // string, a Blob, or something with `bytes()` — RN's {uri,name,type}
+          // descriptor throws "Unsupported FormDataPart implementation", so the turn
+          // never left the device. `File` from expo-file-system implements Blob.
+          form.append('audio', new File(audioUri) as unknown as Blob);
         } else {
           throw new Error('Nothing to send');
         }

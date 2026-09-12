@@ -10,6 +10,7 @@ import {
   setAudioModeAsync,
   useAudioRecorder,
 } from 'expo-audio';
+import { colors } from '../../components/ui';
 import { CountdownRing } from './CountdownRing';
 import { VoiceSheet } from './VoiceSheet';
 import { useVoiceTurn } from './useVoiceTurn';
@@ -137,7 +138,7 @@ const styles = StyleSheet.create({
     width: BUTTON_SIZE,
     height: BUTTON_SIZE,
     borderRadius: BUTTON_SIZE / 2,
-    backgroundColor: '#2B2D42',
+    backgroundColor: colors.cardRaised,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -147,11 +148,11 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   buttonRecording: {
-    backgroundColor: '#B3261E',
+    backgroundColor: colors.drooping,
   },
   icon: {
     fontSize: 20,
-    color: '#fff',
+    color: colors.text,
     fontWeight: '700',
   },
 });

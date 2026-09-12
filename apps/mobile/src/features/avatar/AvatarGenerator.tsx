@@ -12,10 +12,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { AvatarStatusSchema, type AvatarStatus } from '../../lib/shared';
-import { api } from '../../lib/api';
+import { api, mediaUrl } from '../../lib/api';
 import { useToday } from '../../lib/queries';
+import { colors, radius } from '../../components/ui';
 import { authHeadersSync } from './authHeadersSync';
 
 const POLL_MS = 3000;
@@ -92,12 +94,9 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
       const form = new FormData();
       form.append('stylePreset', preset);
       if (photoUri && !isVirtual) {
-        // RN's FormData accepts this file descriptor shape.
-        form.append('photo', {
-          uri: photoUri,
-          name: 'pet.jpg',
-          type: 'image/jpeg',
-        } as unknown as Blob);
+        // Same constraint as `useAnalyzeMeal`: Expo's WinterCG `fetch` rejects RN's
+        // {uri,name,type} descriptor, so hand it a real Blob off disk.
+        form.append('photo', new File(photoUri) as unknown as Blob);
       }
       await api('/avatar/generate', {
         method: 'POST',
@@ -115,11 +114,14 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
 
   const progress = status?.progress;
   const avatar = status?.avatar ?? null;
+  // The API returns server-relative paths ("/api/photos/<id>"), which `<Image>`
+  // cannot resolve and which 401 without credentials — either way the tile renders
+  // empty. `mediaUrl` makes them absolute and credentialed.
   const urlFor = (key: (typeof TILES)[number]['key']): string | null => {
     if (!avatar) return null;
-    if (key === 'neutral') return avatar.neutralUrl;
-    if (key === 'thriving') return avatar.thrivingUrl;
-    return avatar.droopingUrl;
+    const path =
+      key === 'neutral' ? avatar.neutralUrl : key === 'thriving' ? avatar.thrivingUrl : avatar.droopingUrl;
+    return path ? mediaUrl(path) : null;
   };
 
   return (
@@ -223,28 +225,44 @@ export function AvatarGenerator({ onReady }: { onReady: () => void }): React.JSX
   );
 }
 
+// The app is dark-themed end to end (components/ui). These were authored against a
+// light background, which left the title black-on-black once the screen was mounted
+// inside the dark onboarding shell.
 const styles = StyleSheet.create({
   container: { padding: 24, gap: 14 },
-  title: { fontSize: 28, fontWeight: '700' },
-  subtitle: { fontSize: 15, color: '#555', lineHeight: 21 },
-  label: { fontSize: 13, fontWeight: '600', color: '#666', marginTop: 6 },
-  preview: { width: 180, height: 180, borderRadius: 16, alignSelf: 'center' },
-  previewEmpty: { backgroundColor: '#EEF1F5', alignItems: 'center', justifyContent: 'center' },
-  previewEmptyText: { color: '#8A94A6' },
+  title: { fontSize: 28, fontWeight: '700', color: colors.text },
+  subtitle: { fontSize: 15, color: colors.textMuted, lineHeight: 21 },
+  label: { fontSize: 13, fontWeight: '600', color: colors.textMuted, marginTop: 6 },
+  preview: { width: 180, height: 180, borderRadius: radius.lg, alignSelf: 'center' },
+  previewEmpty: { backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  previewEmptyText: { color: colors.textFaint },
   row: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: '#EEF1F5' },
-  chipActive: { backgroundColor: '#2B2D42' },
-  chipText: { color: '#2B2D42', fontWeight: '600' },
-  chipTextActive: { color: '#fff' },
-  primary: { backgroundColor: '#2B2D42', paddingVertical: 15, borderRadius: 14, alignItems: 'center' },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: colors.cardRaised },
+  chipActive: { backgroundColor: colors.thriving },
+  chipText: { color: colors.text, fontWeight: '600' },
+  chipTextActive: { color: colors.bg },
+  primary: { backgroundColor: colors.thriving, paddingVertical: 15, borderRadius: radius.md, alignItems: 'center' },
   primaryDisabled: { opacity: 0.4 },
-  primaryText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  secondary: { paddingVertical: 13, paddingHorizontal: 16, borderRadius: 14, backgroundColor: '#EEF1F5', alignItems: 'center' },
-  secondaryText: { color: '#2B2D42', fontWeight: '600' },
+  primaryText: { color: colors.bg, fontWeight: '700', fontSize: 16 },
+  secondary: {
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderRadius: radius.md,
+    backgroundColor: colors.cardRaised,
+    alignItems: 'center',
+  },
+  secondaryText: { color: colors.text, fontWeight: '600' },
   tiles: { flexDirection: 'row', gap: 10, justifyContent: 'space-between' },
   tileWrap: { flex: 1, gap: 6 },
-  tile: { aspectRatio: 1, borderRadius: 12, backgroundColor: '#EEF1F5', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  tile: {
+    aspectRatio: 1,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   tileImage: { width: '100%', height: '100%' },
-  tileCaption: { textAlign: 'center', fontSize: 12, color: '#666' },
-  error: { color: '#B3261E', fontSize: 13 },
+  tileCaption: { textAlign: 'center', fontSize: 12, color: colors.textMuted },
+  error: { color: colors.drooping, fontSize: 13 },
 });

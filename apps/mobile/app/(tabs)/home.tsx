@@ -8,7 +8,8 @@
  * refresh (see `src/lib/queries.ts`). Pull-to-refresh is the explicit override.
  */
 import type { TodaySummary } from '@petplate/shared';
-import { RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, Skeleton, colors, radius, spacing, typography } from '../../src/components/ui';
 import { PetAvatar } from '../../src/features/avatar';

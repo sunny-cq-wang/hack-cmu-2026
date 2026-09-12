@@ -14,7 +14,7 @@ import { AppError } from '../../lib/errors';
 import { normalizeJpeg } from '../photos';
 
 const IMAGE_TIMEOUT_MS = 60_000;
-const AVATAR_MAX_SIDE = 768;
+const AVATAR_MAX_SIDE = 1024;
 
 export const MAX_REFERENCE_IMAGES = 5;
 
@@ -82,10 +82,20 @@ export async function generateImage(prompt: string): Promise<Buffer> {
   return finish(await extractImage(res, 'imagine.generateImage'), 'imagine.generateImage', prompt, startedAt);
 }
 
+/** Cleared the first time the API rejects the plural shape, so the wasted round
+ * trip is paid once per process instead of once per generated image. */
+let multiReferenceSupported = true;
+
 /**
  * Edit with up to 5 references. The REST field name for multiple references is
  * not documented (the multi-image-editing page 404s), so try the plural `images`
  * array first and fall back to the documented single-image shape on a 4xx.
+ *
+ * `refs` is ordered **anchor last**. That matters: the single-image fallback is
+ * the path actually taken today, and it must send the anchor — the already
+ * stylized character — rather than the raw source photo. Sending the photo made
+ * every state a fresh re-stylization, which is why the three moods used to come
+ * back looking like three different dogs.
  */
 export async function editImage(prompt: string, refs: Buffer[]): Promise<Buffer> {
   requireKey('imagine.editImage');
@@ -103,17 +113,19 @@ export async function editImage(prompt: string, refs: Buffer[]): Promise<Buffer>
     );
 
   const base = { model: config.GROK_IMAGE_MODEL, prompt, n: 1 };
-  const singleShape = { ...base, image: { url: uris[0], type: 'image_url' } };
+  const anchor = uris[uris.length - 1];
+  const singleShape = { ...base, image: { url: anchor, type: 'image_url' } };
 
-  let res =
-    uris.length > 1
-      ? await post({ ...base, images: uris.map((url) => ({ url, type: 'image_url' })) })
-      : await post(singleShape);
+  const tryMulti = uris.length > 1 && multiReferenceSupported;
+  let res = tryMulti
+    ? await post({ ...base, images: uris.map((url) => ({ url, type: 'image_url' })) })
+    : await post(singleShape);
 
-  if (!res.ok && uris.length > 1 && res.status >= 400 && res.status < 500) {
+  if (!res.ok && tryMulti && res.status >= 400 && res.status < 500) {
+    multiReferenceSupported = false;
     log.warn(
       { ext: 'imagine.editImage', status: res.status, refs: uris.length },
-      'multi-reference edit rejected — retrying with the single-image shape',
+      'multi-reference edit rejected — falling back to the anchor reference for the rest of this process',
     );
     res = await post(singleShape);
   }

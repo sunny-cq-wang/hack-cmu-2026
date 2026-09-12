@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import type { VoiceTurnResponse } from '../../lib/shared';
 import { useCreateMeal, useToday } from '../../lib/queries';
+import { colors, radius } from '../../components/ui';
 import type { TurnPhase } from './useVoiceTurn';
 
 interface VoiceSheetProps {
@@ -142,6 +143,7 @@ export function VoiceSheet({
             <TextInput
               style={styles.input}
               placeholder="Ask your pet…"
+              placeholderTextColor={colors.textFaint}
               value={draft}
               onChangeText={setDraft}
               onSubmitEditing={() => {
@@ -171,36 +173,49 @@ export function VoiceSheet({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  backdrop: { flex: 1, backgroundColor: colors.overlay },
   sheet: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 28,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     gap: 12,
   },
-  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#D7DBE2' },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pulse: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#B3261E' },
-  status: { color: '#555', fontSize: 14 },
-  transcript: { fontStyle: 'italic', color: '#8A94A6', fontSize: 14 },
+  pulse: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.drooping },
+  status: { color: colors.textMuted, fontSize: 14 },
+  transcript: { fontStyle: 'italic', color: colors.textFaint, fontSize: 14 },
   replyBlock: { gap: 4 },
-  speaker: { fontWeight: '700', fontSize: 13, color: '#2B2D42' },
-  reply: { fontSize: 17, lineHeight: 24, color: '#12141D' },
-  speaking: { fontSize: 12, color: '#5AA9E6' },
-  card: { backgroundColor: '#F4F6FA', borderRadius: 14, padding: 14, gap: 8 },
-  cardTitle: { fontWeight: '700', fontSize: 15, color: '#12141D' },
-  cardMeta: { color: '#666', fontSize: 13 },
-  primary: { backgroundColor: '#2B2D42', paddingVertical: 11, borderRadius: 12, alignItems: 'center' },
+  speaker: { fontWeight: '700', fontSize: 13, color: colors.thriving },
+  reply: { fontSize: 17, lineHeight: 24, color: colors.text },
+  speaking: { fontSize: 12, color: colors.textMuted },
+  card: { backgroundColor: colors.cardRaised, borderRadius: radius.md, padding: 14, gap: 8 },
+  cardTitle: { fontWeight: '700', fontSize: 15, color: colors.text },
+  cardMeta: { color: colors.textMuted, fontSize: 13 },
+  primary: { backgroundColor: colors.thriving, paddingVertical: 11, borderRadius: radius.md, alignItems: 'center' },
   primaryDisabled: { opacity: 0.5 },
-  primaryText: { color: '#fff', fontWeight: '700' },
-  error: { color: '#B3261E', fontSize: 13 },
-  link: { color: '#5AA9E6', fontWeight: '600', fontSize: 14 },
+  primaryText: { color: colors.bg, fontWeight: '700' },
+  error: { color: colors.drooping, fontSize: 13 },
+  link: { color: colors.thriving, fontWeight: '600', fontSize: 14 },
   textRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  input: { flex: 1, backgroundColor: '#F4F6FA', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15 },
-  sendButton: { backgroundColor: '#2B2D42', paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12 },
+  input: {
+    flex: 1,
+    backgroundColor: colors.cardRaised,
+    color: colors.text,
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 15,
+  },
+  sendButton: {
+    backgroundColor: colors.thriving,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: radius.md,
+  },
   closeButton: { alignSelf: 'center', paddingVertical: 6 },
-  closeText: { color: '#8A94A6', fontWeight: '600' },
+  closeText: { color: colors.textMuted, fontWeight: '600' },
 });

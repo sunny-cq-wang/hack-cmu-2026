@@ -3,8 +3,10 @@
  *
  * Mood comes from `/me/today` — this component never decides it (AGENTS.md §8).
  * Ships as the layered fallback (INTEGRATIONS §4): the Imagine mood images
- * crossfade underneath, with an optional transparent Rive overlay on top once
- * `assets/rive/pet.riv` exists (see riveConfig.ts).
+ * crossfade underneath and `usePetMotion` animates the body from the same three
+ * `PetSM` inputs the Rive state machine takes. Once `assets/rive/pet.riv` exists,
+ * flipping HAS_RIVE_ASSET hands those inputs to the transparent Rive overlay
+ * instead and the JS motion parks itself (see riveConfig.ts).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
@@ -23,6 +25,7 @@ import { ConfettiOverlay } from './ConfettiOverlay';
 import { PetRive, type PetRiveHandle } from './PetRive';
 import { HAS_RIVE_ASSET } from './riveConfig';
 import { happinessFor, imageUrlForMood } from './lib';
+import { usePetMotion } from './petMotion';
 import { useAvatarTalking } from './talkingStore';
 import { authHeadersSync } from './authHeadersSync';
 
@@ -76,6 +79,10 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
     [pushHappiness],
   );
 
+  // The JS state machine. Parked while Rive owns the motion, so the two can never
+  // animate the same body at once.
+  const motion = usePetMotion(happiness, talking, size, !HAS_RIVE_ASSET);
+
   useEffect(() => {
     if (HAS_RIVE_ASSET) riveRef.current?.setTalking(talking);
   }, [talking]);
@@ -94,8 +101,9 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
 
     setConfettiRun((run) => run + 1);
     riveRef.current?.celebrate();
+    motion.celebrate();
     if (today.avatar?.celebrationVideoUrl) setShowVideo(true);
-  }, [today]);
+  }, [today, motion]);
 
   const frontStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
 
@@ -104,14 +112,21 @@ export function PetAvatar({ size = 220 }: { size?: number }): React.JSX.Element 
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
-      {backUrl !== null && (
-        <Image source={backSource} style={[styles.layer, { width: size, height: size }]} resizeMode="contain" />
-      )}
-      <Animated.Image
-        source={source}
-        style={[styles.layer, { width: size, height: size }, frontStyle]}
-        resizeMode="contain"
+      <Animated.View
+        style={[styles.shadow, { width: size * 0.46, bottom: size * 0.06 }, motion.shadowStyle]}
+        pointerEvents="none"
       />
+
+      <Animated.View style={[styles.layer, { width: size, height: size }, motion.bodyStyle]}>
+        {backUrl !== null && (
+          <Image source={backSource} style={[styles.layer, { width: size, height: size }]} resizeMode="contain" />
+        )}
+        <Animated.Image
+          source={source}
+          style={[styles.layer, { width: size, height: size }, frontStyle]}
+          resizeMode="contain"
+        />
+      </Animated.View>
 
       {HAS_RIVE_ASSET && <PetRive ref={riveRef} size={size} talking={talking} />}
       {!HAS_RIVE_ASSET && <ConfettiOverlay size={size} runId={confettiRun} />}
@@ -147,6 +162,14 @@ const styles = StyleSheet.create({
   },
   layer: {
     position: 'absolute',
+  },
+  /** Contact shadow the body hops off; `usePetMotion` scales and fades it. */
+  shadow: {
+    position: 'absolute',
+    alignSelf: 'center',
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: '#000',
   },
   badge: {
     position: 'absolute',

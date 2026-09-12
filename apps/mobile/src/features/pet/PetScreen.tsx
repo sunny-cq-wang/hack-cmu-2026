@@ -113,12 +113,12 @@ export function PetScreen() {
         subjectId={pet.id}
         onMessage={(message, vetFlag) => setToast({ message, vet: vetFlag })}
       />
-      {meQ.data?.user.id ? (
+      {meQ.data?.id ? (
         <WeighInSheet
           visible={userSheet}
           onClose={() => setUserSheet(false)}
           subjectType="user"
-          subjectId={meQ.data.user.id}
+          subjectId={meQ.data.id}
           onMessage={(message, vetFlag) => setToast({ message, vet: vetFlag })}
         />
       ) : null}

@@ -156,9 +156,14 @@ export const mongoStore = {
   async getPhoto(id: string): Promise<{ meta: PhotoRecord; data: Buffer } | null> {
     const _id = oid(id);
     if (!_id) return null;
-    const doc = await PhotoModel.findById(_id).lean();
+    // Deliberately not `.lean()`. A lean read returns the raw BSON `Binary` for
+    // `data`, and `Buffer.from(binary)` yields an EMPTY buffer instead of throwing —
+    // so every caller silently got zero bytes. `photoRoutes` only ever worked because
+    // it uses its own hydrated `findById`. Mongoose hydration gives a real Buffer.
+    const doc = await PhotoModel.findById(_id);
     if (!doc) return null;
-    return { meta: toPhotoMeta(doc), data: Buffer.from((doc as any).data) };
+    const data = doc.data as Buffer;
+    return { meta: toPhotoMeta(doc.toObject()), data };
   },
 
   async createFeeding(feeding: Omit<FeedingRecord, 'id'>): Promise<FeedingRecord> {

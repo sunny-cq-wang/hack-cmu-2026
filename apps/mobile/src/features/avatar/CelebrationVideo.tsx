@@ -6,7 +6,7 @@
 import { useEffect } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { apiUrl } from '../../lib/api';
+import { mediaUrl } from '../../lib/api';
 
 const AUTO_DISMISS_MS = 5500;
 
@@ -16,7 +16,7 @@ interface CelebrationVideoProps {
 }
 
 export function CelebrationVideo({ url, onDone }: CelebrationVideoProps): React.JSX.Element {
-  const player = useVideoPlayer(apiUrl(url), (instance) => {
+  const player = useVideoPlayer(mediaUrl(url), (instance) => {
     instance.loop = false;
     instance.muted = true;
     instance.play();

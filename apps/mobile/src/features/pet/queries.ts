@@ -7,11 +7,17 @@ import {
   WeighInResponseSchema,
   WeighInSchema,
   TrendSchema,
-  UserSchema,
   type Pet,
   type TodaySummary,
 } from '@petplate/shared';
-import { api } from './api';
+import { api } from '../../lib/api';
+// The canonical hooks own the ['me'] and ['today'] cache entries. Redefining them
+// here gave the same keys two different payload shapes, and whichever hook filled
+// the cache first decided which readers crashed. Re-export so callers keep their
+// `./queries` import.
+import { useMe, useToday } from '../../lib/queries';
+
+export { useMe, useToday };
 
 const PetResponse = z.object({ pet: PetSchema });
 const FeedResponse = z.object({ feeding: FeedingSchema, today: TodaySummarySchema });
@@ -19,29 +25,6 @@ const WeighInsResponse = z.object({
   weighIns: z.array(WeighInSchema),
   trend: TrendSchema,
 });
-
-const UserResponse = z.object({ user: UserSchema });
-
-export function useMe() {
-  return useQuery({
-    queryKey: ['me'],
-    queryFn: () =>
-      api('/me/bootstrap', {
-        method: 'POST',
-        body: JSON.stringify({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, name: 'Demo' }),
-        schema: UserResponse,
-      }),
-    staleTime: Infinity,
-  });
-}
-
-export function useToday() {
-  return useQuery({
-    queryKey: ['today'],
-    queryFn: () => api('/me/today', { schema: TodaySummarySchema }),
-    staleTime: 0,
-  });
-}
 
 export function usePet() {
   const today = useToday();
@@ -71,7 +54,7 @@ export function useFeed() {
 export function useWeighIns(subject: 'pet' | 'user') {
   const today = useToday();
   const me = useMe();
-  const subjectId = subject === 'pet' ? today.data?.pet?.petId : me.data?.user.id;
+  const subjectId = subject === 'pet' ? today.data?.pet?.petId : me.data?.id;
   return useQuery({
     queryKey: ['weighins', subject, subjectId],
     enabled: Boolean(subjectId),

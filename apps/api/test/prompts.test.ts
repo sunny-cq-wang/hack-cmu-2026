@@ -31,9 +31,9 @@ describe('stylePrompt', () => {
 
 describe('statePrompt', () => {
   it('appends the state suffix verbatim', () => {
-    expect(statePrompt('sticker', null, 'neutral', false)).toContain('Neutral relaxed expression, sitting.');
+    expect(statePrompt('sticker', null, 'neutral', false)).toContain('Neutral relaxed expression, sitting');
     expect(statePrompt('sticker', null, 'thriving', false)).toContain('Beaming happy expression, eyes bright, tail up');
-    expect(statePrompt('sticker', null, 'drooping', false)).toContain('Sad droopy expression, ears down, slumped posture');
+    expect(statePrompt('sticker', null, 'drooping', false)).toContain('Sad droopy expression, ears lowered, slumped posture');
   });
 
   it('adds the consistency prefix only when multiple references are sent', () => {
@@ -42,8 +42,27 @@ describe('statePrompt', () => {
   });
 
   it('keeps "Same character, same style" on the non-neutral states', () => {
-    expect(statePrompt('sticker', null, 'drooping', false)).toContain('Same character, same style.');
-    expect(statePrompt('sticker', null, 'neutral', false)).not.toContain('Same character, same style.');
+    expect(statePrompt('sticker', null, 'drooping', false)).toContain('Same character, same style');
+    expect(statePrompt('sticker', null, 'neutral', false)).not.toContain('Same character, same style');
+  });
+
+  it('never refers to a reference image by position', () => {
+    // The multi-image request shape is rejected by the current model, so exactly one
+    // reference reaches the API. Wording like "the second image" pointed at an image
+    // that was never sent, and the three moods drifted into different-looking pets.
+    for (const state of ['neutral', 'thriving', 'drooping'] as const) {
+      for (const withPrefix of [true, false]) {
+        const prompt = statePrompt('sticker', null, state, withPrefix).toLowerCase();
+        expect(prompt).not.toContain('second image');
+        expect(prompt).not.toContain('first image');
+      }
+    }
+  });
+
+  it('pins the identity traits that must not drift between states', () => {
+    expect(CONSISTENCY_PREFIX).toContain('ear shape');
+    expect(CONSISTENCY_PREFIX).toContain('coat colour and markings');
+    expect(CONSISTENCY_PREFIX).toContain('Change only the facial expression and body pose');
   });
 });
 

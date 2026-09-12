@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { config } from '../src/config';
 import { normalizeVoice } from '../src/services/voice/tts';
 
 describe('normalizeVoice', () => {
@@ -13,9 +14,12 @@ describe('normalizeVoice', () => {
   });
 
   it('falls back to the configured default when blank or missing', () => {
-    expect(normalizeVoice('')).toBe('eve');
-    expect(normalizeVoice('   ')).toBe('eve');
-    expect(normalizeVoice(null)).toBe('eve');
-    expect(normalizeVoice(undefined)).toBe('eve');
+    // Read the default from config: GROK_DEFAULT_VOICE is overridable via .env,
+    // so a literal here would fail on any machine that sets it.
+    const fallback = config.GROK_DEFAULT_VOICE.toLowerCase();
+    expect(normalizeVoice('')).toBe(fallback);
+    expect(normalizeVoice('   ')).toBe(fallback);
+    expect(normalizeVoice(null)).toBe(fallback);
+    expect(normalizeVoice(undefined)).toBe(fallback);
   });
 });

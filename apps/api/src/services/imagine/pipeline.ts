@@ -14,6 +14,7 @@ import type { PetRecord } from '../../db/types';
 import { log } from '../../lib/log';
 import * as photos from '../photos';
 import { petAvatarToInfo } from '../today';
+import { cutoutBackground, flattenForUpstream } from './cutout';
 import { editImage, generateImage } from './images';
 import { pollVideo, startImageToVideo } from './video';
 import {
@@ -43,10 +44,14 @@ export const isPipelineRunning = (petId: string): boolean => running.has(petId);
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Stored avatars are transparent PNGs. Both consumers of this — Imagine reference
+ * images and the video seed — want an opaque frame, so flatten on the way out.
+ */
 async function loadBuffer(photoId: string | null): Promise<Buffer | null> {
   if (!photoId) return null;
   const found = await photos.get(photoId);
-  return found?.data ?? null;
+  return found ? await flattenForUpstream(found.data) : null;
 }
 
 /**
@@ -62,14 +67,18 @@ async function renderState(
 ): Promise<string | null> {
   const description = source ? null : virtualDescription(pet.breed, pet.species);
 
-  // For thriving/drooping, pass both the original photo and the generated neutral
-  // so the character stays consistent; the prefix tells the model which to match.
+  // Anchor last: `editImage` sends the final reference when the multi-image shape
+  // is unavailable, so the generated neutral — the established character — is what
+  // thriving and drooping are edited from, not the raw photo.
   const refs = [source, state === 'neutral' ? null : neutral].filter((b): b is Buffer => b !== null);
   const prompt = statePrompt(preset, description, state, refs.length > 1);
 
   try {
     const image = refs.length > 0 ? await editImage(prompt, refs) : await generateImage(prompt);
-    const stored = await photos.store(pet.userId, 'avatar', image, 'image/jpeg');
+    // The avatar animates over the dark dashboard, so the card behind the mascot
+    // has to go. Falls back to the untouched JPEG if the key is not safe.
+    const display = await cutoutBackground(image);
+    const stored = await photos.store(pet.userId, 'avatar', display.buffer, display.contentType);
     await db.patchPetAvatar(pet.id, { [PHOTO_ID_FIELD[state]]: stored.id });
     log.info({ petId: pet.id, state, photoId: stored.id }, 'avatar state stored');
     return stored.id;

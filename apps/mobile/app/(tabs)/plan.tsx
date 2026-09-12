@@ -4,7 +4,8 @@
  */
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, Skeleton, colors, radius, spacing, typography } from '../../src/components/ui';
 import type { MealSlot } from '../../src/features/meals';

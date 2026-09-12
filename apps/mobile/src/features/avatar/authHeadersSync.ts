@@ -1,17 +1,9 @@
 /**
  * React Native's `<Image source={{ uri, headers }}>` needs headers synchronously,
- * but the real auth token comes from an async Auth0 call. This holds the last
- * known headers so image loads never block.
- *
- * TODO(P1): call `primeAuthHeaders()` once after sign-in with the Auth0 access
- * token so photo requests carry a real bearer token.
+ * but the real auth token comes from an async Auth0 call. `lib/api` keeps a snapshot
+ * of the last headers it resolved, refreshed on every request, so image loads never
+ * block and never go out without a bearer token once a session exists.
  */
-import { config } from '../../lib/config';
+import { authHeadersSnapshot } from '../../lib/api';
 
-let cached: Record<string, string> = config.devUser ? { 'x-dev-user': config.devUser } : {};
-
-export const primeAuthHeaders = (headers: Record<string, string>): void => {
-  cached = headers;
-};
-
-export const authHeadersSync = (): Record<string, string> => cached;
+export const authHeadersSync = (): Record<string, string> => authHeadersSnapshot();
