@@ -206,16 +206,26 @@ async function main(): Promise<void> {
     await recomputeDay(user._id.toString(), key);
   }
 
-  const weighDates = [13, 6, 0];
-  for (const offset of weighDates) {
-    const at = addDays(today, -offset);
-    const weeks = offset / 7;
+  // Weekly weigh-ins across ~90 days, oldest first. Hand-tuned rather than random
+  // so every demo run draws the identical, well-shaped curve: a steady drop, a
+  // mid-series plateau with a small uptick (weeks 5–7 / days 56–42 ago), then the
+  // trend resuming. Ideal is 12 kg for Biscuit and 75 kg for the human, so both
+  // lines stay above their dashed reference line.
+  const PET_SERIES_KG = [15.2, 15.05, 14.7, 14.45, 14.15, 13.95, 14.05, 13.9, 13.6, 13.3, 13.05, 12.85, 12.7, 12.6];
+  const USER_SERIES_KG = [84.0, 83.6, 83.1, 82.7, 82.4, 82.5, 82.1, 81.6, 81.2, 80.9, 80.4, 80.1, 79.8, 79.5];
+  const WEIGHIN_COUNT = PET_SERIES_KG.length;
+
+  for (let i = 0; i < WEIGHIN_COUNT; i += 1) {
+    // i = 0 is the oldest (91 days ago); the last one lands on today.
+    const daysAgo = (WEIGHIN_COUNT - 1 - i) * 7;
+    const key = format(addDays(today, -daysAgo), 'yyyy-MM-dd');
+    const at = new Date(`${key}T07:30:00-04:00`);
     await WeighInModel.create({
       subjectType: 'pet',
       subjectId: pet._id,
       userId: user._id,
       weighedAt: at,
-      weightKg: Number((14 - 0.15 * (13 / 7 - weeks)).toFixed(2)),
+      weightKg: PET_SERIES_KG[i] ?? PET_SERIES_KG[WEIGHIN_COUNT - 1]!,
       note: null,
     });
     await WeighInModel.create({
@@ -223,7 +233,7 @@ async function main(): Promise<void> {
       subjectId: user._id,
       userId: user._id,
       weighedAt: at,
-      weightKg: Number((80 - 0.4 * (13 / 7 - weeks)).toFixed(2)),
+      weightKg: USER_SERIES_KG[i] ?? USER_SERIES_KG[WEIGHIN_COUNT - 1]!,
       note: null,
     });
   }

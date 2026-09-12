@@ -3,7 +3,7 @@
  * card the agent produced. Includes a "type instead" path so the flow survives
  * a broken microphone or STT outage.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -17,15 +17,23 @@ import type { VoiceTurnResponse } from '../../lib/shared';
 import { useCreateMeal, useToday } from '../../lib/queries';
 import { colors, radius } from '../../components/ui';
 import type { TurnPhase } from './useVoiceTurn';
+import type { RecorderPhase } from './useRecorderSession';
 
 interface VoiceSheetProps {
-  recording: boolean;
+  micPhase: RecorderPhase;
   phase: TurnPhase;
   response: VoiceTurnResponse | null;
   error: string | null;
   onClose: () => void;
   onSendText: (text: string) => void;
 }
+
+const MIC_STATUS: Record<RecorderPhase, string | null> = {
+  idle: null,
+  preparing: 'Getting the mic ready…',
+  recording: 'Listening… release to send',
+  stopping: 'One sec…',
+};
 
 interface SuggestPayload {
   title: string;
@@ -51,7 +59,7 @@ function asSuggestion(payload: Record<string, unknown>): SuggestPayload | null {
 }
 
 export function VoiceSheet({
-  recording,
+  micPhase,
   phase,
   response,
   error,
@@ -63,6 +71,14 @@ export function VoiceSheet({
   const [showText, setShowText] = useState(false);
   const [draft, setDraft] = useState('');
   const [logged, setLogged] = useState(false);
+
+  const micStatus = MIC_STATUS[micPhase];
+
+  // Anything that goes wrong drops the user straight onto the text path, and it
+  // stays open once opened so the input cannot vanish mid-sentence.
+  useEffect(() => {
+    if (error !== null) setShowText(true);
+  }, [error]);
 
   const petName = today?.pet?.name ?? 'Your buddy';
   const suggestion = response?.actions.map((a) => (a.type === 'suggest_meal' ? asSuggestion(a.payload) : null)).find(Boolean) ?? null;
@@ -83,10 +99,10 @@ export function VoiceSheet({
       <View style={styles.sheet}>
         <View style={styles.handle} />
 
-        {recording && (
+        {micStatus !== null && (
           <View style={styles.statusRow}>
             <View style={styles.pulse} />
-            <Text style={styles.status}>Listening… release to send</Text>
+            <Text style={styles.status}>{micStatus}</Text>
           </View>
         )}
 
@@ -132,7 +148,12 @@ export function VoiceSheet({
           </View>
         )}
 
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error && (
+          <View style={styles.errorBlock}>
+            <Text style={styles.error}>{error}</Text>
+            <Text style={styles.errorHint}>Type your message below and the turn continues as normal.</Text>
+          </View>
+        )}
 
         {!showText ? (
           <Pressable onPress={() => setShowText(true)}>
@@ -198,7 +219,9 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: colors.thriving, paddingVertical: 11, borderRadius: radius.md, alignItems: 'center' },
   primaryDisabled: { opacity: 0.5 },
   primaryText: { color: colors.bg, fontWeight: '700' },
+  errorBlock: { gap: 2 },
   error: { color: colors.drooping, fontSize: 13 },
+  errorHint: { color: colors.textMuted, fontSize: 12 },
   link: { color: colors.thriving, fontWeight: '600', fontSize: 14 },
   textRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   input: {

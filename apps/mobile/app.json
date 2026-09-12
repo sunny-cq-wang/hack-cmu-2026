@@ -15,7 +15,8 @@
     "android": {
       "package": "app.petplate.mobile",
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
@@ -44,7 +45,21 @@
           "microphonePermission": "PetPlate uses the microphone so you can talk to your pet."
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "expo-notifications",
+        {
+          "color": "#3DDC97"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ]
   }
 }

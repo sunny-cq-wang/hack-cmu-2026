@@ -9,7 +9,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, Skeleton, colors, radius, spacing, typography } from '../../src/components/ui';
 import type { MealSlot } from '../../src/features/meals';
-import { GapList, PlanCard, type PlannedMeal } from '../../src/features/plan';
+import {
+  GapList,
+  PlanCard,
+  PlanInstructions,
+  useInstructionsDraft,
+  type PlannedMeal,
+} from '../../src/features/plan';
 import { isApiError } from '../../src/lib/api';
 import { useCreateMeal, useGaps, useGeneratePlan } from '../../src/lib/queries';
 
@@ -25,6 +31,8 @@ export default function PlanTab(): React.JSX.Element {
   const [logError, setLogError] = useState<string | null>(null);
   const [loggingSlot, setLoggingSlot] = useState<MealSlot | null>(null);
   const [loggedSlots, setLoggedSlots] = useState<MealSlot[]>([]);
+  // Survives tab switches: the draft lives outside this component (features/plan).
+  const [instructions, setInstructions] = useInstructionsDraft();
 
   const plan = generatePlan.data ?? null;
 
@@ -32,12 +40,15 @@ export default function PlanTab(): React.JSX.Element {
     setGenerateError(null);
     setLogError(null);
     setLoggedSlots([]);
-    generatePlan.mutate(undefined, {
-      onError: (cause) =>
-        setGenerateError(
-          isApiError(cause) ? cause.message : "Could not build tomorrow's plan. Try again.",
-        ),
-    });
+    generatePlan.mutate(
+      { customInstructions: instructions },
+      {
+        onError: (cause) =>
+          setGenerateError(
+            isApiError(cause) ? cause.message : "Could not build tomorrow's plan. Try again.",
+          ),
+      },
+    );
   };
 
   const logMeal = (meal: PlannedMeal): void => {
@@ -91,6 +102,12 @@ export default function PlanTab(): React.JSX.Element {
         <View style={styles.section}>
           <Text style={typography.label}>Tomorrow</Text>
 
+          <PlanInstructions
+            value={instructions}
+            onChange={setInstructions}
+            disabled={generatePlan.isPending}
+          />
+
           <Button
             title={plan ? 'Plan tomorrow again' : 'Plan tomorrow'}
             onPress={generate}
@@ -125,6 +142,9 @@ export default function PlanTab(): React.JSX.Element {
               <Text style={typography.caption}>
                 For {plan.forDayKey} · {Math.round(plan.dayTotals.kcal)} kcal across {plan.meals.length} meals
               </Text>
+              {plan.customInstructions ? (
+                <Text style={typography.caption}>Built with: {plan.customInstructions}</Text>
+              ) : null}
               {logError ? <Text style={styles.error}>{logError}</Text> : null}
               {plan.meals.map((meal) => (
                 <PlanCard

@@ -1,127 +1,84 @@
 /**
  * Floating push-to-talk button. Hold to record (max 20 s), release to send.
  * Opens its own `VoiceSheet` — the Home screen just renders `<TalkButton />`.
+ *
+ * The recorder lifecycle lives in `useRecorderSession`, which serializes every
+ * native call; this component only renders it and routes the finished clip into
+ * `useVoiceTurn`.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import {
-  RecordingPresets,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioRecorder,
-} from 'expo-audio';
 import { colors } from '../../components/ui';
 import { CountdownRing } from './CountdownRing';
 import { VoiceSheet } from './VoiceSheet';
 import { useVoiceTurn } from './useVoiceTurn';
+import { MAX_RECORD_MS, useRecorderSession, type RecordedClip } from './useRecorderSession';
 
 const BUTTON_SIZE = 56;
-const MAX_RECORD_MS = 20_000;
-const TICK_MS = 100;
 
 export function TalkButton(): React.JSX.Element {
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const turn = useVoiceTurn();
 
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [micError, setMicError] = useState<string | null>(null);
 
-  const ticker = useRef<ReturnType<typeof setInterval> | null>(null);
-  const autoStop = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Guards the release handler against firing after the 20 s auto-stop.
-  const stopping = useRef(false);
+  const handleClip = useCallback(
+    (clip: RecordedClip) => {
+      void turn.send({ audioUri: clip.uri });
+    },
+    [turn],
+  );
 
-  const clearTimers = useCallback(() => {
-    if (ticker.current) clearInterval(ticker.current);
-    if (autoStop.current) clearTimeout(autoStop.current);
-    ticker.current = null;
-    autoStop.current = null;
+  const handleFailure = useCallback((message: string) => {
+    setMicError(message);
+    setSheetOpen(true);
   }, []);
 
-  useEffect(() => clearTimers, [clearTimers]);
+  const mic = useRecorderSession({ onClip: handleClip, onFailure: handleFailure });
 
-  const finish = useCallback(async () => {
-    if (stopping.current) return;
-    stopping.current = true;
-    clearTimers();
-    setRecording(false);
-
-    try {
-      await recorder.stop();
-    } catch {
-      // Nothing was captured; fall through and let the sheet show the error.
-    }
-    const uri = recorder.uri;
-    setElapsed(0);
-
-    if (!uri) {
-      setPermissionError("Couldn't capture audio — try the text option.");
-      return;
-    }
-    await turn.send({ audioUri: uri });
-  }, [clearTimers, recorder, turn]);
-
-  const begin = useCallback(async () => {
-    setPermissionError(null);
+  const handlePressIn = useCallback(() => {
+    setMicError(null);
+    // Releases any player still holding the audio session and stops the pet
+    // mid-sentence if the user interrupts.
     turn.reset();
-
-    const permission = await requestRecordingPermissionsAsync();
-    if (!permission.granted) {
-      setPermissionError('Microphone permission denied');
-      setSheetOpen(true);
-      return;
-    }
-
-    try {
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-    } catch (err) {
-      setPermissionError((err as Error).message);
-      setSheetOpen(true);
-      return;
-    }
-
-    stopping.current = false;
-    setRecording(true);
     setSheetOpen(true);
-    setElapsed(0);
+    mic.press();
+  }, [mic, turn]);
 
-    ticker.current = setInterval(() => setElapsed((ms) => ms + TICK_MS), TICK_MS);
-    autoStop.current = setTimeout(() => void finish(), MAX_RECORD_MS);
-  }, [finish, recorder, turn]);
-
-  const secondsLeft = Math.max(0, Math.ceil((MAX_RECORD_MS - elapsed) / 1000));
+  const secondsLeft = Math.max(0, Math.ceil((MAX_RECORD_MS - mic.elapsedMs) / 1000));
 
   return (
     <>
       <View style={styles.wrap} pointerEvents="box-none">
         <Pressable
-          onPressIn={() => void begin()}
-          onPressOut={() => void finish()}
-          style={[styles.button, recording && styles.buttonRecording]}
+          onPressIn={handlePressIn}
+          onPressOut={mic.release}
+          style={[styles.button, mic.active && styles.buttonRecording]}
           accessibilityLabel="Hold to talk to your pet"
           accessibilityRole="button"
         >
-          {recording && <CountdownRing size={BUTTON_SIZE} progress={elapsed / MAX_RECORD_MS} />}
-          <Text style={styles.icon}>{recording ? String(secondsLeft) : '🎙'}</Text>
+          {mic.phase === 'recording' && (
+            <CountdownRing size={BUTTON_SIZE} progress={mic.elapsedMs / MAX_RECORD_MS} />
+          )}
+          <Text style={styles.icon}>{mic.phase === 'recording' ? String(secondsLeft) : '🎙'}</Text>
         </Pressable>
       </View>
 
       {sheetOpen && (
         <VoiceSheet
-          recording={recording}
+          micPhase={mic.phase}
           phase={turn.phase}
           response={turn.response}
-          error={permissionError ?? turn.error}
+          error={micError ?? turn.error}
           onClose={() => {
             turn.reset();
             setSheetOpen(false);
-            setPermissionError(null);
+            setMicError(null);
           }}
-          onSendText={(text) => void turn.send({ text })}
+          onSendText={(text) => {
+            setMicError(null);
+            void turn.send({ text });
+          }}
         />
       )}
     </>

@@ -7,4 +7,6 @@ export const colors = {
   okay: '#FFC857',
   drooping: '#FF6B6B',
   accent: '#6EA8FE',
+  /** Second series colour, so the human weight chart reads apart from the pet's. */
+  accentAlt: '#B79CFF',
 };

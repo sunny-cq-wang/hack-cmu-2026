@@ -21,6 +21,8 @@ const mealPlanSchema = new Schema<MealPlanFields>(
     dayTotals: { type: Schema.Types.Mixed, required: true },
     verified: { type: Boolean, default: false },
     attempts: { type: Number, default: 1 },
+    // Part of the cache key: a plan asked for with different instructions is a different plan.
+    customInstructions: { type: String, default: null },
   },
   { timestamps: true },
 );
@@ -36,6 +38,7 @@ mealPlanSchema.methods.toApi = function toApi(this: MealPlanDoc): MealPlan {
     dayTotals: this.dayTotals,
     verified: this.verified,
     attempts: this.attempts,
+    customInstructions: this.customInstructions ?? null,
   });
 };
 

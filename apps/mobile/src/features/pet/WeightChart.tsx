@@ -1,39 +1,293 @@
-import { StyleSheet, Text, View } from 'react-native';
-import type { Trend } from '@petplate/shared';
+/**
+ * Weigh-in trend chart (pet or human).
+ *
+ * Pure presentation: every number it draws is handed to it by the API
+ * (AGENTS.md §4.3 — the app never computes targets or trends). It only maps
+ * kilograms and timestamps onto pixels.
+ *
+ * Drawn with `react-native-svg` (the same dependency `features/home/ScoreRing.tsx`
+ * uses) — no victory-native, no skia.
+ */
+import { useId, useMemo, useState } from 'react';
+import { Dimensions, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Stop, Text as SvgText } from 'react-native-svg';
+import type { Trend, WeighIn } from '@petplate/shared';
+
 import { colors } from './theme';
 
-/** Lightweight chart until P1 adds victory-native to the Expo app. */
-export function WeightChart(props: { trend: Trend | undefined; idealWeightKg: number; caption?: string }) {
-  const points = props.trend?.points ?? [];
-  if (points.length === 0) {
-    return (
-      <Text style={styles.empty}>Add a weigh-in weekly and PetPlate will tune the portion automatically.</Text>
-    );
+const CHART_HEIGHT = 176;
+const PAD_TOP = 22;
+const PAD_BOTTOM = 20;
+const PAD_X = 14;
+const Y_AXIS_WIDTH = 44;
+const AXIS_LINE_HEIGHT = 14;
+/** Catmull-Rom tension; below 1 keeps the curve from overshooting a spiky series. */
+const SMOOTHING = 0.8;
+/** Smallest kg range we ever scale to, so a flat series is not a divide-by-zero. */
+const MIN_SPAN_KG = 0.6;
+
+const DEFAULT_EMPTY_COPY = 'Add a weigh-in weekly and PetPlate will tune the portion automatically.';
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+
+interface SeriesPoint {
+  at: string;
+  kg: number;
+}
+
+interface PlotPoint {
+  x: number;
+  y: number;
+  kg: number;
+  at: string;
+}
+
+export interface WeightChartProps {
+  /** `TrendSchema` from the `/weighins` response. */
+  trend: Trend | undefined;
+  /** Ideal (pet) or target (human) weight — drawn as the dashed reference line. */
+  idealWeightKg: number;
+  /**
+   * Raw weigh-ins from the same response. `trend.points` is clipped to the
+   * adaptive window (`WEIGHIN_WINDOW_DAYS` = 14 days), so the raw list is
+   * usually the longer, better-looking series; whichever has more points wins.
+   */
+  weighIns?: readonly WeighIn[] | undefined;
+  caption?: string | undefined;
+  /** Word in front of the reference-line value: "Ideal 12 kg" / "Target 75 kg". */
+  idealLabel?: string;
+  /** Line/fill colour. Defaults to the app accent; pass another to tell two charts apart. */
+  tint?: string;
+  emptyCopy?: string;
+  accessibilityLabel?: string;
+}
+
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${MONTHS[d.getMonth()] ?? ''} ${d.getDate()}`;
+}
+
+/** Prefer the raw weigh-ins, fall back to `trend.points`. Always oldest to newest. */
+function buildSeries(trend: Trend | undefined, weighIns: readonly WeighIn[] | undefined): SeriesPoint[] {
+  const fromWeighIns: SeriesPoint[] = (weighIns ?? []).map((w) => ({ at: w.weighedAt, kg: w.weightKg }));
+  const fromTrend: SeriesPoint[] = trend?.points ?? [];
+  const source = fromWeighIns.length > fromTrend.length ? fromWeighIns : fromTrend;
+  return source
+    .filter((p) => Number.isFinite(p.kg) && !Number.isNaN(Date.parse(p.at)))
+    .slice()
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
+/** Catmull-Rom to cubic Bezier, so the line curves through every point it owns. */
+function smoothPath(points: readonly { x: number; y: number }[]): string {
+  const first = points[0];
+  if (!first) return '';
+  if (points.length === 1) return `M ${first.x} ${first.y}`;
+  let d = `M ${first.x} ${first.y}`;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p1 = points[i] ?? first;
+    const p2 = points[i + 1] ?? p1;
+    const p0 = points[i - 1] ?? p1;
+    const p3 = points[i + 2] ?? p2;
+    const c1x = p1.x + ((p2.x - p0.x) / 6) * SMOOTHING;
+    const c1y = p1.y + ((p2.y - p0.y) / 6) * SMOOTHING;
+    const c2x = p2.x - ((p3.x - p1.x) / 6) * SMOOTHING;
+    const c2y = p2.y - ((p3.y - p1.y) / 6) * SMOOTHING;
+    d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
   }
-  const kgs = points.map((p) => p.kg);
-  const min = Math.min(...kgs, props.idealWeightKg);
-  const max = Math.max(...kgs, props.idealWeightKg);
-  const span = Math.max(0.1, max - min);
+  return d;
+}
+
+export function WeightChart(props: WeightChartProps): React.JSX.Element {
+  const { trend, idealWeightKg, weighIns, caption, tint = colors.accent } = props;
+  const idealLabel = props.idealLabel ?? 'Ideal';
+  const emptyCopy = props.emptyCopy ?? DEFAULT_EMPTY_COPY;
+
+  // <Defs> ids are shared across every SVG on screen, so two charts on one page
+  // would fight over a single gradient id without this.
+  const rawId = useId();
+  const gradientId = `wc${rawId.replace(/[^a-zA-Z0-9]/g, '')}`;
+  const [plotWidth, setPlotWidth] = useState(() =>
+    Math.max(160, Dimensions.get('window').width - 40 - Y_AXIS_WIDTH - 16),
+  );
+
+  const series = useMemo(() => buildSeries(trend, weighIns), [trend, weighIns]);
+
+  const geometry = useMemo(() => {
+    if (series.length === 0) return null;
+    const kgs = series.map((p) => p.kg);
+    const lo = Math.min(...kgs, idealWeightKg);
+    const hi = Math.max(...kgs, idealWeightKg);
+    // A flat (or single-point) series has no range of its own; centre it inside a
+    // synthetic MIN_SPAN_KG window rather than dividing by zero.
+    const flat = hi - lo < MIN_SPAN_KG;
+    const span = Math.max(MIN_SPAN_KG, hi - lo);
+    const mid = (lo + hi) / 2;
+    const yMin = flat ? mid - span / 2 : lo;
+    const yMax = flat ? mid + span / 2 : hi;
+
+    const innerW = Math.max(1, plotWidth - PAD_X * 2);
+    const innerH = CHART_HEIGHT - PAD_TOP - PAD_BOTTOM;
+    const lastIndex = series.length - 1;
+    const toY = (kg: number): number => PAD_TOP + ((yMax - kg) / (yMax - yMin)) * innerH;
+    const toX = (i: number): number =>
+      lastIndex === 0 ? PAD_X + innerW / 2 : PAD_X + (i / lastIndex) * innerW;
+
+    const markers: PlotPoint[] = series.map((p, i) => ({ x: toX(i), y: toY(p.kg), kg: p.kg, at: p.at }));
+    const head = markers[0];
+    const tail = markers[markers.length - 1];
+    if (!head || !tail) return null;
+
+    // A single weigh-in still deserves a line: stretch it flat across the plot.
+    const strokePoints =
+      markers.length === 1 ? [{ x: PAD_X, y: head.y }, { x: PAD_X + innerW, y: head.y }] : markers;
+    const linePath = smoothPath(strokePoints);
+    const baseY = CHART_HEIGHT - PAD_BOTTOM + 8;
+    const areaStart = strokePoints[0] ?? head;
+    const areaEnd = strokePoints[strokePoints.length - 1] ?? tail;
+    const areaPath = `${linePath} L ${areaEnd.x} ${baseY} L ${areaStart.x} ${baseY} Z`;
+
+    const idealY = toY(idealWeightKg);
+    return {
+      markers,
+      first: head,
+      last: tail,
+      linePath,
+      areaPath,
+      idealY,
+      idealAbove: idealY < PAD_TOP + AXIS_LINE_HEIGHT,
+      yMin,
+      yMax,
+    };
+  }, [series, idealWeightKg, plotWidth]);
+
+  const onLayout = (e: LayoutChangeEvent): void => {
+    const w = Math.round(e.nativeEvent.layout.width);
+    if (w > 0 && w !== plotWidth) setPlotWidth(w);
+  };
+
+  if (!geometry) {
+    return <Text style={styles.empty}>{emptyCopy}</Text>;
+  }
+
+  const { markers, first, last, linePath, areaPath, idealY, idealAbove, yMin, yMax } = geometry;
+  const valueLabelY = last.y - 14 < AXIS_LINE_HEIGHT ? last.y + 22 : last.y - 14;
+
   return (
-    <View style={styles.wrap}>
-      <View style={styles.chart}>
-        {points.map((p, i) => {
-          const x = (i / Math.max(1, points.length - 1)) * 100;
-          const y = ((max - p.kg) / span) * 100;
-          return <View key={p.at} style={[styles.dot, { left: `${x}%`, top: `${y}%` }]} />;
-        })}
-        <View style={[styles.ideal, { top: `${((max - props.idealWeightKg) / span) * 100}%` }]} />
+    <View
+      style={styles.wrap}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={
+        props.accessibilityLabel ??
+        `Weight trend: ${markers.length} weigh-ins, latest ${last.kg.toFixed(1)} kg, ${idealLabel.toLowerCase()} ${idealWeightKg} kg.`
+      }
+    >
+      <View style={styles.chartCard}>
+        <View style={styles.yAxis}>
+          <Text style={styles.axisText}>{yMax.toFixed(1)}</Text>
+          <Text style={styles.axisText}>{yMin.toFixed(1)}</Text>
+        </View>
+        <View style={styles.plot} onLayout={onLayout}>
+          <Svg width={plotWidth} height={CHART_HEIGHT}>
+            <Defs>
+              <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={tint} stopOpacity="0.36" />
+                <Stop offset="1" stopColor={tint} stopOpacity="0.02" />
+              </LinearGradient>
+            </Defs>
+
+            <Path d={areaPath} fill={`url(#${gradientId})`} />
+
+            <Line
+              x1={PAD_X}
+              y1={idealY}
+              x2={plotWidth - PAD_X}
+              y2={idealY}
+              stroke={colors.thriving}
+              strokeWidth={1.5}
+              strokeDasharray="6 5"
+              opacity={0.9}
+            />
+            <SvgText
+              x={PAD_X}
+              y={idealAbove ? idealY + 14 : idealY - 6}
+              fill={colors.thriving}
+              fontSize={11}
+              fontWeight="600"
+            >
+              {`${idealLabel} ${idealWeightKg} kg`}
+            </SvgText>
+
+            <Path
+              d={linePath}
+              stroke={tint}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+
+            {markers.map((p, i) => {
+              const newest = i === markers.length - 1;
+              return (
+                <G key={`${p.at}-${i}`}>
+                  {newest ? <Circle cx={p.x} cy={p.y} r={10} fill={tint} opacity={0.22} /> : null}
+                  <Circle
+                    cx={p.x}
+                    cy={p.y}
+                    r={newest ? 5 : 3.2}
+                    fill={newest ? tint : colors.card}
+                    stroke={tint}
+                    strokeWidth={newest ? 2 : 1.6}
+                  />
+                </G>
+              );
+            })}
+
+            <SvgText x={last.x} y={valueLabelY} fill={colors.text} fontSize={12} fontWeight="700" textAnchor="end">
+              {`${last.kg.toFixed(1)} kg`}
+            </SvgText>
+          </Svg>
+        </View>
       </View>
-      {props.caption ? <Text style={styles.caption}>{props.caption}</Text> : null}
+
+      <View style={styles.xAxis}>
+        <Text style={styles.axisText}>{formatShortDate(first.at)}</Text>
+        <Text style={styles.axisText}>{formatShortDate(last.at)}</Text>
+      </View>
+
+      {caption ? <Text style={styles.caption}>{caption}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 8 },
-  chart: { height: 140, backgroundColor: colors.card, borderRadius: 12, overflow: 'hidden', position: 'relative' },
-  dot: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent, marginLeft: -4, marginTop: -4 },
-  ideal: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: colors.thriving, opacity: 0.7 },
+  wrap: { gap: 6 },
+  chartCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    paddingRight: 8,
+    overflow: 'hidden',
+  },
+  yAxis: {
+    width: Y_AXIS_WIDTH,
+    height: CHART_HEIGHT,
+    paddingLeft: 12,
+    paddingTop: PAD_TOP - AXIS_LINE_HEIGHT / 2,
+    paddingBottom: PAD_BOTTOM - AXIS_LINE_HEIGHT / 2,
+    justifyContent: 'space-between',
+  },
+  plot: { flex: 1, height: CHART_HEIGHT },
+  xAxis: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingLeft: Y_AXIS_WIDTH,
+    paddingRight: 8,
+  },
+  axisText: { color: colors.muted, fontSize: 11, lineHeight: AXIS_LINE_HEIGHT },
   caption: { color: colors.muted, fontSize: 13 },
   empty: { color: colors.muted, fontSize: 14 },
 });
