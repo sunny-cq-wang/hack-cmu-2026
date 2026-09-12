@@ -1,0 +1,23 @@
+{
+  "name": "petplate",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "zod": "^3.25.76"
+    }
+  }
+}
