@@ -163,7 +163,54 @@ Import with `try/catch`-free static imports; if the module isn't there yet, crea
 - [ ] `pnpm typecheck` clean.
 
 ## 8. Requests to other owners
-(append here)
+
+**P1 → P2 (`packages/shared`).** The workspace had no `package.json` for the shared
+package, so P1 created the wrapper around the existing `types.ts` — **`types.ts` itself
+was not touched.** New files: `packages/shared/package.json` (`@petplate/shared`,
+`main: ./src/index.ts` so Metro transpiles the source directly), `src/index.ts`
+(`export * from './types'`), `tsconfig.json`, `tsconfig.build.json` (`pnpm --filter
+@petplate/shared build` emits `dist/` for the API). zod is pinned to `^3.25.76` — do not
+move to zod 4, `types.ts` relies on v3 behaviour for `z.string().datetime()` and the
+single-argument `z.record()`.
+
+**P1 → P2 (response envelopes).** `API_CONTRACTS.md` wraps most payloads
+(`{ user }`, `{ meal, today }`, `{ meals }`, `{ pet }`, `{ feeding, today }`,
+`{ plan }`, `{ days }`), but `@petplate/shared` only ships the inner schemas. P1
+composes the envelopes in `apps/mobile/src/lib/contracts.ts` **from** the shared
+schemas — no field is re-declared. Please lift that file into `@petplate/shared` when
+you build the API so both sides validate the identical object, then P1 deletes it.
+
+**P1 → P3 / P4 (placeholders).** `src/features/pet/index.tsx`,
+`src/features/avatar/index.tsx` and `src/features/voice/index.tsx` are marked
+`// PLACEHOLDER` and export exactly the §6 signatures. Delete them and drop your real
+files in place; do not merge into them. Two notes: they are `.tsx` (they render JSX),
+and `TalkButton` is typed `(): React.JSX.Element | null` because the placeholder
+renders nothing as §4 requires.
 
 ## 9. Implementation notes
-(append here when done)
+
+### Foundation phase — plan sections 1–6 plus the tab route shell
+
+Delivered on branch `p1/mobile-core`. Home, Log, Plan and the Pet re-export are still
+stubs; the rest of this section gets appended by whoever finishes them.
+
+- **Toolchain.** pnpm 10.34.5 (`corepack enable pnpm` fails with EPERM on this
+  machine — install with `npm i -g pnpm@10`), Expo SDK 57 (`expo ~57.0.22`,
+  React Native 0.86.3, React 19.2.3), TypeScript ~6.0.3.
+- **Workspace.** `nodeLinker: hoisted` in `pnpm-workspace.yaml`; React Native and
+  Metro are far happier with a flat `node_modules`. `metro.config.js` still adds the
+  workspace root to `watchFolders` and enables symlinks for `@petplate/shared`.
+- **Env files.** Expo reads `.env` from the Expo project directory, not the monorepo
+  root, so the `EXPO_PUBLIC_*` block is duplicated in `apps/mobile/.env.example`.
+  Copy it to `apps/mobile/.env`. The root `.env.example` remains the master list.
+- **Dev switches.** `EXPO_PUBLIC_MOCK_API=true` serves every route from
+  `src/lib/mock` (seeded as a fully onboarded demo account with a pet, two meals and
+  one feeding; call `resetMockStore(false)` to walk onboarding from scratch).
+  `EXPO_PUBLIC_DEV_USER=<email>` skips Auth0 entirely and sends `x-dev-user`, which
+  pairs with `DEV_BYPASS_AUTH=true` on the API.
+- **Before `expo prebuild`:** put the real tenant into the `react-native-auth0`
+  plugin `domain` in `app.json` (it currently reads `TENANT.us.auth0.com`), then add
+  the callback/logout URLs to the Auth0 dashboard as described in §2.
+- **Verification.** `pnpm typecheck` is clean across the workspace and
+  `npx expo export --platform android` bundles (3741 modules). No native build was
+  run — that stays a manual step.
