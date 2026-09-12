@@ -17,7 +17,7 @@ import { Feeding } from '../db/models/feeding';
 import { WeighIn } from '../db/models/weighIn';
 import { computePetTargets } from '../services/targets/pet';
 import { recomputeDay } from '../services/scoring/recomputeDay';
-import { logFeeding } from '../services/feedings';
+import { deleteFeeding, logFeeding } from '../services/feedings';
 import type { PetInput } from '@petplate/shared';
 import { callToApi } from '../db/models/serialize';
 
@@ -121,8 +121,11 @@ petsRoutes.put('/:id', async (c) => {
   const userId = c.get('userId');
   const pet = await requireOwnedPet(c.req.param('id'), userId);
   const patch = PetInputSchema.partial().parse(await c.req.json());
+  const previousSpecies = pet.species;
   const weightChanged = patch.weightKg !== undefined && patch.weightKg !== pet.weightKg;
+  const speciesChanged = patch.species !== undefined && patch.species !== previousSpecies;
   const recomputeTargets =
+    speciesChanged ||
     patch.weightKg !== undefined ||
     patch.idealWeightKg !== undefined ||
     patch.neutered !== undefined ||
@@ -135,6 +138,19 @@ petsRoutes.put('/:id', async (c) => {
     pet.weightKg = VIRTUAL_PET_KG;
     pet.idealWeightKg = VIRTUAL_PET_KG;
     pet.neutered = true;
+  }
+  // Old Imagine frames were drawn for the previous species (a dog photo stays a
+  // dog). Drop them so Home stops showing the wrong animal and New photo starts clean.
+  if (speciesChanged) {
+    pet.avatar.status = 'none';
+    pet.avatar.sourcePhotoId = null;
+    pet.avatar.neutralPhotoId = null;
+    pet.avatar.thrivingPhotoId = null;
+    pet.avatar.droopingPhotoId = null;
+    pet.avatar.celebrationVideoUrl = null;
+    pet.avatar.stylePrompt = '';
+    pet.avatar.imagineJobs = [];
+    pet.markModified('avatar');
   }
   if (recomputeTargets) {
     const input = toPetInput(pet);
@@ -191,4 +207,9 @@ petsRoutes.get('/:id/feedings', async (c) => {
   const key = date ? DayKey.parse(date) : dayKey(new Date(), tz);
   const rows = await Feeding.find({ petId: pet._id, dayKey: key }).sort({ fedAt: 1 });
   return c.json({ feedings: rows.map((r) => FeedingSchema.parse(callToApi(r))) });
+});
+
+petsRoutes.delete('/:id/feedings/:feedingId', async (c) => {
+  await deleteFeeding(c.get('userId'), c.req.param('id'), c.req.param('feedingId'));
+  return c.body(null, 204);
 });

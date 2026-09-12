@@ -24,7 +24,11 @@ const AXIS_LINE_HEIGHT = 14;
 /** Catmull-Rom tension; below 1 keeps the curve from overshooting a spiky series. */
 const SMOOTHING = 0.8;
 /** Smallest kg range we ever scale to, so a flat series is not a divide-by-zero. */
-const MIN_SPAN_KG = 0.6;
+const MIN_SPAN_KG = 0.4;
+/** Plot the newest N points so a fresh weigh-in actually moves the line. */
+const RECENT_POINTS = 8;
+/** Pull the ideal line into the axis only when it sits this close to the data. */
+const IDEAL_INCLUDE_KG = 0.8;
 
 const DEFAULT_EMPTY_COPY = 'Add a weigh-in weekly and PetPlate will tune the portion automatically.';
 
@@ -73,10 +77,11 @@ function buildSeries(trend: Trend | undefined, weighIns: readonly WeighIn[] | un
   const fromWeighIns: SeriesPoint[] = (weighIns ?? []).map((w) => ({ at: w.weighedAt, kg: w.weightKg }));
   const fromTrend: SeriesPoint[] = trend?.points ?? [];
   const source = fromWeighIns.length > fromTrend.length ? fromWeighIns : fromTrend;
-  return source
+  const all = source
     .filter((p) => Number.isFinite(p.kg) && !Number.isNaN(Date.parse(p.at)))
     .slice()
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  return all.length > RECENT_POINTS ? all.slice(-RECENT_POINTS) : all;
 }
 
 /** Catmull-Rom to cubic Bezier, so the line curves through every point it owns. */
@@ -117,15 +122,24 @@ export function WeightChart(props: WeightChartProps): React.JSX.Element {
   const geometry = useMemo(() => {
     if (series.length === 0) return null;
     const kgs = series.map((p) => p.kg);
-    const lo = Math.min(...kgs, idealWeightKg);
-    const hi = Math.max(...kgs, idealWeightKg);
-    // A flat (or single-point) series has no range of its own; centre it inside a
-    // synthetic MIN_SPAN_KG window rather than dividing by zero.
-    const flat = hi - lo < MIN_SPAN_KG;
-    const span = Math.max(MIN_SPAN_KG, hi - lo);
-    const mid = (lo + hi) / 2;
-    const yMin = flat ? mid - span / 2 : lo;
-    const yMax = flat ? mid + span / 2 : hi;
+    const dataLo = Math.min(...kgs);
+    const dataHi = Math.max(...kgs);
+    const dataSpan = dataHi - dataLo;
+    const pad = Math.max(0.12, dataSpan * 0.25);
+    let yMin = dataLo - pad;
+    let yMax = dataHi + pad;
+    // Keep the ideal line on-plot when it is near the series. Stretching all the
+    // way to a far-away ideal (12 kg vs 14–15 kg of seed history) flattened new
+    // weigh-ins into a 2 px wiggle.
+    if (Math.abs(idealWeightKg - dataLo) <= IDEAL_INCLUDE_KG || Math.abs(idealWeightKg - dataHi) <= IDEAL_INCLUDE_KG) {
+      yMin = Math.min(yMin, idealWeightKg - 0.1);
+      yMax = Math.max(yMax, idealWeightKg + 0.1);
+    }
+    if (yMax - yMin < MIN_SPAN_KG) {
+      const mid = (yMin + yMax) / 2;
+      yMin = mid - MIN_SPAN_KG / 2;
+      yMax = mid + MIN_SPAN_KG / 2;
+    }
 
     const innerW = Math.max(1, plotWidth - PAD_X * 2);
     const innerH = CHART_HEIGHT - PAD_TOP - PAD_BOTTOM;
@@ -148,7 +162,8 @@ export function WeightChart(props: WeightChartProps): React.JSX.Element {
     const areaEnd = strokePoints[strokePoints.length - 1] ?? tail;
     const areaPath = `${linePath} L ${areaEnd.x} ${baseY} L ${areaStart.x} ${baseY} Z`;
 
-    const idealY = toY(idealWeightKg);
+    const idealInRange = idealWeightKg >= yMin && idealWeightKg <= yMax;
+    const idealY = toY(Math.min(yMax, Math.max(yMin, idealWeightKg)));
     return {
       markers,
       first: head,
@@ -156,6 +171,7 @@ export function WeightChart(props: WeightChartProps): React.JSX.Element {
       linePath,
       areaPath,
       idealY,
+      idealInRange,
       idealAbove: idealY < PAD_TOP + AXIS_LINE_HEIGHT,
       yMin,
       yMax,
@@ -171,7 +187,7 @@ export function WeightChart(props: WeightChartProps): React.JSX.Element {
     return <Text style={styles.empty}>{emptyCopy}</Text>;
   }
 
-  const { markers, first, last, linePath, areaPath, idealY, idealAbove, yMin, yMax } = geometry;
+  const { markers, first, last, linePath, areaPath, idealY, idealInRange, idealAbove, yMin, yMax } = geometry;
   const valueLabelY = last.y - 14 < AXIS_LINE_HEIGHT ? last.y + 22 : last.y - 14;
 
   return (
@@ -200,25 +216,29 @@ export function WeightChart(props: WeightChartProps): React.JSX.Element {
 
             <Path d={areaPath} fill={`url(#${gradientId})`} />
 
-            <Line
-              x1={PAD_X}
-              y1={idealY}
-              x2={plotWidth - PAD_X}
-              y2={idealY}
-              stroke={colors.thriving}
-              strokeWidth={1.5}
-              strokeDasharray="6 5"
-              opacity={0.9}
-            />
-            <SvgText
-              x={PAD_X}
-              y={idealAbove ? idealY + 14 : idealY - 6}
-              fill={colors.thriving}
-              fontSize={11}
-              fontWeight="600"
-            >
-              {`${idealLabel} ${idealWeightKg} kg`}
-            </SvgText>
+            {idealInRange ? (
+              <>
+                <Line
+                  x1={PAD_X}
+                  y1={idealY}
+                  x2={plotWidth - PAD_X}
+                  y2={idealY}
+                  stroke={colors.thriving}
+                  strokeWidth={1.5}
+                  strokeDasharray="6 5"
+                  opacity={0.9}
+                />
+                <SvgText
+                  x={PAD_X}
+                  y={idealAbove ? idealY + 14 : idealY - 6}
+                  fill={colors.thriving}
+                  fontSize={11}
+                  fontWeight="600"
+                >
+                  {`${idealLabel} ${idealWeightKg} kg`}
+                </SvgText>
+              </>
+            ) : null}
 
             <Path
               d={linePath}
@@ -258,6 +278,10 @@ export function WeightChart(props: WeightChartProps): React.JSX.Element {
         <Text style={styles.axisText}>{formatShortDate(last.at)}</Text>
       </View>
 
+      <Text style={styles.latest}>{`Latest ${last.kg.toFixed(1)} kg`}</Text>
+      {!idealInRange ? (
+        <Text style={styles.caption}>{`${idealLabel} ${idealWeightKg} kg is outside this zoom`}</Text>
+      ) : null}
       {caption ? <Text style={styles.caption}>{caption}</Text> : null}
     </View>
   );
@@ -289,5 +313,6 @@ const styles = StyleSheet.create({
   },
   axisText: { color: colors.muted, fontSize: 11, lineHeight: AXIS_LINE_HEIGHT },
   caption: { color: colors.muted, fontSize: 13 },
+  latest: { color: colors.text, fontSize: 15, fontWeight: '700' },
   empty: { color: colors.muted, fontSize: 14 },
 });

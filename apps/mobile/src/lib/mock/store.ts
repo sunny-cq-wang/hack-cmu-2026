@@ -527,6 +527,40 @@ export function getPet(): { pet: Pet } {
   return { pet: state.pet };
 }
 
+export function updatePet(input: unknown): { pet: Pet } {
+  if (!state.pet) {
+    throw new Error('mock: no pet yet');
+  }
+  const patch = input as Partial<PetInput>;
+  const speciesChanged = patch.species !== undefined && patch.species !== state.pet.species;
+  const nextSpecies = patch.species ?? state.pet.species;
+  const pet = PetSchema.parse({
+    ...state.pet,
+    ...patch,
+    species: nextSpecies,
+    avatar: speciesChanged
+      ? AvatarInfoSchema.parse({
+          status: 'none',
+          neutralUrl: null,
+          thrivingUrl: null,
+          droopingUrl: null,
+          celebrationVideoUrl: null,
+        })
+      : state.pet.avatar,
+  });
+  state.pet = pet;
+  return { pet };
+}
+
+export function listFeedings(dayKey: string | null): { feedings: Feeding[] } {
+  const key = dayKey ?? todayKey();
+  return { feedings: state.feedings.filter((feeding) => feeding.dayKey === key) };
+}
+
+export function deleteFeeding(id: string): void {
+  state.feedings = state.feedings.filter((feeding) => feeding.id !== id);
+}
+
 export function createFeeding(input: unknown): { feeding: Feeding; today: TodaySummary } {
   const pet = state.pet;
   if (!pet) {

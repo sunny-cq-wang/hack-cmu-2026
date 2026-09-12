@@ -93,7 +93,8 @@ const LINES_BY_MOOD: Record<AvatarState, readonly string[]> = {
 };
 
 /** Said instead of the mood line when the day is already outstanding. */
-const PERFECT_LINE = "Perfect plate. Chef's kiss. 🐶";
+const PERFECT_LINE_DOG = "Perfect plate. Chef's kiss. 🐶";
+const PERFECT_LINE_CAT = "Perfect plate. Chef's kiss. 🐱";
 /** Said when the day has barely started, whatever the mood reads as. */
 const EMPTY_DAY_LINE = 'Nothing logged yet — start us off?';
 
@@ -107,8 +108,13 @@ const EMPTY_SCORE = 1;
  * @param score today's combined score, straight from `/me/today`. Only used to pick
  *   which list to read — never recomputed here.
  */
-export function petSpeech(mood: AvatarState, score: number, index: number): string {
-  if (score >= PERFECT_SCORE) return PERFECT_LINE;
+export function petSpeech(
+  mood: AvatarState,
+  score: number,
+  index: number,
+  species?: string | null,
+): string {
+  if (score >= PERFECT_SCORE) return species === 'cat' ? PERFECT_LINE_CAT : PERFECT_LINE_DOG;
   if (score < EMPTY_SCORE) return EMPTY_DAY_LINE;
   const lines = LINES_BY_MOOD[mood];
   const safe = lines.length > 0 ? lines : LINES_BY_MOOD.okay;

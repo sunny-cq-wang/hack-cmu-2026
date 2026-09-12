@@ -136,6 +136,7 @@ Request: `{ "grams": 92, "fedAt": "2026-09-12T12:00:00Z", "source": "tap" }` (`g
 Response 201: `{ "feeding": Feeding, "today": TodaySummary }`
 
 ### `GET /pets/:id/feedings?date=YYYY-MM-DD` → `{ "feedings": Feeding[] }`
+### `DELETE /pets/:id/feedings/:feedingId` → 204, recomputes day.
 
 ### `POST /weighins`
 Request: `{ "subjectType": "pet", "subjectId": "66f...", "weightKg": 13.7, "weighedAt": "2026-09-12T08:00:00Z" }`

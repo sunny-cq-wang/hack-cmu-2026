@@ -31,6 +31,7 @@ function formatNumber(value: number): string {
 export function TodayTotals({ human, pet }: TodayTotalsProps): React.JSX.Element {
   const router = useRouter();
   const goToPet = (): void => router.push('/(tabs)/pet');
+  const goToYou = (): void => router.push('/(tabs)/you');
 
   const humanLine = `${formatNumber(human.consumed.kcal)} / ${formatNumber(human.targets.kcal)} kcal · ${formatNumber(
     human.consumed.proteinG,
@@ -38,14 +39,14 @@ export function TodayTotals({ human, pet }: TodayTotalsProps): React.JSX.Element
 
   return (
     <View style={styles.stack}>
-      <Card testID="today-totals-human">
+      <Card
+        onPress={goToYou}
+        accessibilityLabel={`You: ${humanLine}. Opens your goals tab.`}
+        testID="today-totals-human"
+      >
         <View style={styles.headerRow}>
           <Text style={typography.heading}>You</Text>
-          <Text style={typography.caption}>
-            {human.mealsLogged === 0
-              ? 'No meals logged yet'
-              : `${human.mealsLogged} meal${human.mealsLogged === 1 ? '' : 's'} logged`}
-          </Text>
+          <ChevronRight size={18} color={colors.textMuted} />
         </View>
         <Text style={typography.body}>{humanLine}</Text>
         <ProgressBar

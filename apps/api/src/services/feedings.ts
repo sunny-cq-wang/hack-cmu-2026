@@ -3,6 +3,7 @@
  * `log_feeding` tool so both stay on P3's models + recomputeDay.
  */
 import type { TodaySummary } from '@petplate/shared';
+import { Types } from 'mongoose';
 import { Feeding } from '../db/models/feeding';
 import { Pet } from '../db/models/pet';
 import { User } from '../db/models/user';
@@ -58,4 +59,20 @@ export async function logFeeding(
     today: await buildToday(userId),
     feeding,
   };
+}
+
+/** Undo a mistaken tap. Recomputes the feeding's day so `/me/today` drops those grams. */
+export async function deleteFeeding(userId: string, petId: string, feedingId: string): Promise<void> {
+  if (!Types.ObjectId.isValid(feedingId) || !Types.ObjectId.isValid(petId)) {
+    throw new AppError('NOT_FOUND', 'Feeding not found');
+  }
+  const pet = await Pet.findById(petId);
+  if (!pet || String(pet.userId) !== userId) throw new AppError('NOT_FOUND', 'Pet not found');
+  const feeding = await Feeding.findById(feedingId);
+  if (!feeding || String(feeding.petId) !== String(pet._id) || String(feeding.userId) !== userId) {
+    throw new AppError('NOT_FOUND', 'Feeding not found');
+  }
+  const key = feeding.dayKey;
+  await feeding.deleteOne();
+  await recomputeDay(userId, key);
 }

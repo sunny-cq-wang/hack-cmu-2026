@@ -51,6 +51,9 @@ export const FeedingResponseSchema = z.object({
   today: TodaySummarySchema,
 });
 
+/** `GET /pets/:id/feedings?date=` */
+export const FeedingsResponseSchema = z.object({ feedings: z.array(FeedingSchema) });
+
 /** `POST /mealplans/generate` */
 export const MealPlanResponseSchema = z.object({ plan: MealPlanSchema });
 
@@ -68,5 +71,6 @@ export type MealCreateResponse = z.infer<typeof MealCreateResponseSchema>;
 export type MealsResponse = z.infer<typeof MealsResponseSchema>;
 export type PetResponse = z.infer<typeof PetResponseSchema>;
 export type FeedingResponse = z.infer<typeof FeedingResponseSchema>;
+export type FeedingsResponse = z.infer<typeof FeedingsResponseSchema>;
 export type MealPlanResponse = z.infer<typeof MealPlanResponseSchema>;
 export type ScoresResponse = z.infer<typeof ScoresResponseSchema>;

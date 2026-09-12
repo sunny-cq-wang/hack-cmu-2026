@@ -66,18 +66,23 @@ weighinsRoutes.post('/', async (c) => {
   const user = await User.findById(userId);
   if (!user) throw new AppError('NOT_FOUND', 'User not found');
   const body = WeighInCreateSchema.parse(await c.req.json());
+  // Human rows always belong to the signed-in user. The client may not have
+  // `/me` yet, so do not require it to guess the ObjectId.
+  const subjectId = body.subjectType === 'user' ? userId : body.subjectId;
 
   if (body.subjectType === 'user') {
-    if (body.subjectId !== userId) throw new AppError('FORBIDDEN', 'Cannot log another user\'s weight');
+    if (body.weightKg < 30 || body.weightKg > 300) {
+      throw new AppError('VALIDATION_ERROR', 'Weight must be between 30 and 300 kg');
+    }
   } else {
-    const pet = await Pet.findById(body.subjectId);
+    const pet = await Pet.findById(subjectId);
     if (!pet || String(pet.userId) !== userId) throw new AppError('NOT_FOUND', 'Pet not found');
   }
 
   const weighedAt = body.weighedAt ? new Date(body.weighedAt) : new Date();
   const row = await WeighIn.create({
     subjectType: body.subjectType,
-    subjectId: body.subjectId,
+    subjectId,
     userId: user._id,
     weighedAt,
     weightKg: body.weightKg,
@@ -86,7 +91,7 @@ weighinsRoutes.post('/', async (c) => {
 
   const history = await WeighIn.find({
     subjectType: body.subjectType,
-    subjectId: body.subjectId,
+    subjectId,
   }).sort({ weighedAt: 1 });
   const points = history.map((w) => ({ weighedAt: w.weighedAt.toISOString(), weightKg: w.weightKg }));
 
@@ -127,7 +132,7 @@ weighinsRoutes.post('/', async (c) => {
     adjustment = adj;
     trendOut = trend(points, user.profile.targetWeightKg ?? body.weightKg);
   } else {
-    const pet = await Pet.findById(body.subjectId);
+    const pet = await Pet.findById(subjectId);
     if (!pet) throw new AppError('NOT_FOUND', 'Pet not found');
     pet.weightKg = body.weightKg;
     const input = toPetInput(pet);
@@ -187,21 +192,19 @@ weighinsRoutes.get('/', async (c) => {
     subjectId: c.req.query('subjectId'),
     limit: c.req.query('limit') ?? 30,
   });
-  if (q.subjectType === 'user' && q.subjectId !== userId) {
-    throw new AppError('FORBIDDEN', 'Cannot read another user\'s weigh-ins');
-  }
+  const subjectId = q.subjectType === 'user' ? userId : q.subjectId;
   if (q.subjectType === 'pet') {
-    const pet = await Pet.findById(q.subjectId);
+    const pet = await Pet.findById(subjectId);
     if (!pet || String(pet.userId) !== userId) throw new AppError('NOT_FOUND', 'Pet not found');
   }
-  const rows = await WeighIn.find({ subjectType: q.subjectType, subjectId: q.subjectId })
+  const rows = await WeighIn.find({ subjectType: q.subjectType, subjectId })
     .sort({ weighedAt: -1 })
     .limit(q.limit);
   const chronological = [...rows].reverse();
   const points = chronological.map((w) => ({ weighedAt: w.weighedAt.toISOString(), weightKg: w.weightKg }));
   let targetKg = chronological[chronological.length - 1]?.weightKg ?? 0;
   if (q.subjectType === 'pet') {
-    const pet = await Pet.findById(q.subjectId);
+    const pet = await Pet.findById(subjectId);
     if (pet) targetKg = pet.idealWeightKg;
   } else {
     const user = await User.findById(userId);

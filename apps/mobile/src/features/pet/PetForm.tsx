@@ -1,12 +1,20 @@
+import { Camera } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PetInputSchema, PetSchema, type Pet } from '@petplate/shared';
-import { colors } from './theme';
+import { colors, usePetPagePad } from './theme';
 import { useSavePet } from './queries';
 
 const LB = 2.20462;
 
-export function PetForm(props: { onSaved: (pet: Pet) => void; existing?: Pet }) {
+export function PetForm(props: {
+  onSaved: (pet: Pet) => void;
+  existing?: Pet;
+  /** Leave the edit form without saving. */
+  onCancel?: () => void;
+  /** Open the avatar "New photo" flow. Only shown when editing an existing pet. */
+  onNewPhoto?: () => void;
+}) {
   const save = useSavePet();
   const ex = props.existing;
   const [name, setName] = useState(ex?.name ?? '');
@@ -26,6 +34,7 @@ export function PetForm(props: { onSaved: (pet: Pet) => void; existing?: Pet }) 
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<Pet | null>(null);
 
+  const pagePad = usePetPagePad();
   const virtual = species === 'virtual';
 
   async function submit() {
@@ -60,6 +69,9 @@ export function PetForm(props: { onSaved: (pet: Pet) => void; existing?: Pet }) 
       const pet = PetSchema.parse(res.pet);
       setSaved(pet);
       props.onSaved(pet);
+      if (props.existing && props.existing.species !== pet.species) {
+        props.onNewPhoto?.();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save pet');
     }
@@ -69,11 +81,38 @@ export function PetForm(props: { onSaved: (pet: Pet) => void; existing?: Pet }) 
   const perMeal = saved && saved.targets.mealsPerDay > 0 ? Math.round(saved.targets.portionGramsPerDay / saved.targets.mealsPerDay) : null;
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <Text style={styles.h1}>{props.existing ? 'Edit pet' : 'Your pet'}</Text>
+    <ScrollView contentContainerStyle={[styles.page, pagePad]}>
+      <View style={styles.titleRow}>
+        <Text style={styles.h1}>{props.existing ? 'Edit pet' : 'Your pet'}</Text>
+        {props.existing && props.onCancel ? (
+          <Pressable onPress={props.onCancel} accessibilityRole="button" accessibilityLabel="Cancel editing">
+            <Text style={styles.cancel}>Cancel</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <Field label="Name" value={name} onChange={setName} />
-      <Seg label="Species" value={species} options={['dog', 'cat', 'virtual']} onChange={(v) => setSpecies(v as Pet['species'])} />
-      <Field label="Breed (optional, for the avatar)" value={breed} onChange={setBreed} />
+      <Seg
+        label="Species"
+        value={species}
+        options={['dog', 'cat', 'virtual']}
+        onChange={(v) => {
+          const next = v as Pet['species'];
+          if (next !== species) setBreed('');
+          setSpecies(next);
+        }}
+      />
+      <Field
+        label="Breed (optional, for the avatar)"
+        value={breed}
+        onChange={setBreed}
+        hint={
+          species === 'cat'
+            ? 'e.g. tabby, Siamese — used when drawing the avatar'
+            : species === 'virtual'
+              ? undefined
+              : 'e.g. Beagle mix — used when drawing the avatar'
+        }
+      />
       <Seg label="Sex" value={sex ?? 'male'} options={['male', 'female']} onChange={(v) => setSex(v as Pet['sex'])} />
       <Pressable onPress={() => setNeutered((n) => !n)} style={styles.toggle}>
         <Text style={styles.label}>Neutered: {neutered ? 'yes' : 'no'}</Text>
@@ -100,6 +139,17 @@ export function PetForm(props: { onSaved: (pet: Pet) => void; existing?: Pet }) 
       <Field label="kcal per cup" value={kcalCup} onChange={setKcalCup} keyboard="decimal-pad" hint="On the bag: 'kcal/cup'. Leave default if unsure." />
       <Field label="grams per cup" value={gramsCup} onChange={setGramsCup} keyboard="decimal-pad" />
       {error ? <Text style={styles.err}>{error}</Text> : null}
+      {props.existing && props.onNewPhoto ? (
+        <Pressable
+          style={styles.secondary}
+          onPress={props.onNewPhoto}
+          accessibilityRole="button"
+          accessibilityLabel="Regenerate avatar from a new photo"
+        >
+          <Camera size={18} color={colors.accent} />
+          <Text style={styles.secondaryText}>New photo</Text>
+        </Pressable>
+      ) : null}
       <Pressable style={styles.btn} onPress={() => void submit()} disabled={save.isPending}>
         <Text style={styles.btnText}>{save.isPending ? 'Saving…' : 'Save pet'}</Text>
       </Pressable>
@@ -152,8 +202,21 @@ function Seg<T extends string>(props: { label: string; value: T; options: T[]; o
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 20, gap: 14, backgroundColor: colors.bg },
-  h1: { color: colors.text, fontSize: 28, fontWeight: '700' },
+  page: { padding: 20, gap: 14, backgroundColor: colors.bg, paddingBottom: 40 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  h1: { color: colors.text, fontSize: 28, fontWeight: '700', flexShrink: 1 },
+  cancel: { color: colors.accent, fontWeight: '600' },
+  secondary: {
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  secondaryText: { color: colors.accent, fontWeight: '600' },
   label: { color: colors.muted, fontSize: 13 },
   input: { backgroundColor: colors.card, color: colors.text, borderRadius: 10, padding: 12 },
   hint: { color: colors.muted, fontSize: 12 },

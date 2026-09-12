@@ -145,12 +145,17 @@ Expect `targets.kcal: 452`, `portionGramsPerDay: 132`, `mealsPerDay: 2`.
 
 **Stretch skipped:** multi-feeding countdown, 7-day score bar, cat-mode copy.
 
+**Human weigh-ins (2026-09-12):** `POST/GET /weighins` with `subjectType=user` now always uses the signed-in `userId` (client may send `self` if `/me` has not loaded). Human weight is rejected outside 30–300 kg so a typo cannot brick `HumanProfileSchema` on the next `/me`. Pet tab has one **Log pet weigh-in** and one **Log my weigh-in**; the human sheet always mounts and surfaces save errors.
+
+**Safe area + human goals (2026-09-12):** Pet tab pads `insets.top + 12` so the header clears the status/notification bar. Human goals/weigh-ins moved to a **You** tab (`HumanScreen` / `HumanForm`, mounted from `app/(tabs)/you.tsx`). Pet tab is pet-only.
+
 ### Requests to other owners
 
 **P2**
 - Mount `petsRoutes`, `weighinsRoutes`, `scoresRoutes` under `/api` (already done in the stub `index.ts`; keep them when you replace the boot file).
 - Import `recomputeDay` / `buildDailyScore` from `services/scoring` after meals writes.
 - Import `computeHumanTargets` from `services/targets/human` on `PUT /me/profile`.
+- `PUT /me/profile` always inserts a `weighIns` row. Skip that when `weightKg` is unchanged so editing goal/activity does not pollute the chart.
 - `buildToday` should call `recomputeDay` when today’s `dailyScores` row is missing (stub currently reads only).
 - Replace auth JWT, models `toApi` typing, Mongo boot. Keep `targets.adjustmentLog` (cap 10) on user and pet — P3 writes it.
 - Seed script: use `computeHumanTargets`, `computePetTargets`, `recomputeDay` per DATA_MODEL §10.
@@ -160,4 +165,5 @@ Expect `targets.kcal: 452`, `portionGramsPerDay: 132`, `mealsPerDay: 2`.
 - Mount `<PetForm onSaved={...} />` on onboarding/pet and `<PetScreen />` on `(tabs)/pet`.
 - After feed/weigh-in, P3 already writes `['today']` (feed) / refetches today (weigh-in). Keep that cache key.
 - Swap WeightChart to Victory Native when the Expo app has `victory-native`.
+- You tab: `app/(tabs)/you.tsx` mounts `HumanScreen`. Keep that route if you reshuffle tabs.
 

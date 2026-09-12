@@ -1,3 +1,5 @@
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 export const colors = {
   bg: '#0F1115',
   card: '#1A1D24',
@@ -10,3 +12,9 @@ export const colors = {
   /** Second series colour, so the human weight chart reads apart from the pet's. */
   accentAlt: '#B79CFF',
 };
+
+/** Home/Log/Plan wrap in SafeAreaView; this tab does not, so pad past the status bar. */
+export function usePetPagePad(): { paddingTop: number } {
+  const insets = useSafeAreaInsets();
+  return { paddingTop: insets.top + 12 };
+}
