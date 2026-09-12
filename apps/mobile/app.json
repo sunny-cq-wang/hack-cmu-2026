@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "PetPlate",
+    "slug": "petplate",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "petplate",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0F1115",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "app.petplate.mobile",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "app.petplate.mobile",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-auth0",
+        {
+          "domain": "TENANT.us.auth0.com"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "PetPlate uses the camera to log meals."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PetPlate uses your photos for meals and your pet's avatar."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "PetPlate uses the microphone so you can talk to your pet."
+        }
+      ]
+    ]
+  }
+}

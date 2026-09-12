@@ -13,7 +13,6 @@ build/
 .expo-shared/
 apps/mobile/ios/
 apps/mobile/android/
-expo-env.d.ts
 
 *.log
 npm-debug.log*
