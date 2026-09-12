@@ -26,6 +26,10 @@ ios/
 # scratch verification output (may contain generated media)
 apps/api/scripts/scratch/out/
 
+# local scratch dirs
+.tmp/
+apps/api/.data/
+
 # logs
 *.log
 npm-debug.log*
