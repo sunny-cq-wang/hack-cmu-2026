@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.DS_Store
+*.log
+.turbo
+coverage/
+.expo/
+ios/
+android/
+*.tsbuildinfo
+.pnpm-store/
+.vscode/
+.idea/
