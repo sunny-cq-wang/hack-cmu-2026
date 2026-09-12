@@ -4,10 +4,15 @@
  * `EXPO_PUBLIC_DEV_USER` short-circuits the whole thing with a synthetic session so
  * onboarding is walkable without an Auth0 tenant; `api.ts` then sends `x-dev-user`
  * instead of a bearer token (pairs with `DEV_BYPASS_AUTH=true` on the API).
+ *
+ * why the lazy require: `react-native-auth0` resolves its TurboModule with
+ * `TurboModuleRegistry.getEnforcing('A0Auth0')` at *module evaluation* time, which
+ * throws outright in Expo Go — it has no custom native code. A top-level import would
+ * therefore crash the app before the dev session ever got a chance to opt out, so the
+ * real implementation is pulled in only when there is no dev user.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
-import { useAuth0 } from 'react-native-auth0';
 
 import { setAccessTokenProvider } from './api';
 import { config } from './config';
@@ -43,17 +48,24 @@ export interface AuthSession {
   signOut: () => Promise<void>;
 }
 
-export function useAuth(): AuthSession {
-  const auth0 = useAuth0();
+type Auth0Module = typeof import('react-native-auth0');
+
+let auth0Module: Auth0Module | null = null;
+
+/** Evaluates `react-native-auth0` on first use. Never called in a dev session. */
+export function requireAuth0(): Auth0Module {
+  auth0Module ??= require('react-native-auth0') as Auth0Module;
+  return auth0Module;
+}
+
+/** The real Auth0-backed session. */
+function useRealAuth(): AuthSession {
+  const auth0 = requireAuth0().useAuth0();
   const queryClient = useQueryClient();
-  const devUser = config.devUser;
 
   const { authorize, clearSession, clearCredentials, getCredentials, user, isLoading, error } = auth0;
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
-    if (devUser) {
-      return null;
-    }
     try {
       const credentials = await getCredentials(undefined, 0, {});
       return credentials?.accessToken ?? null;
@@ -63,7 +75,7 @@ export function useAuth(): AuthSession {
       });
       return null;
     }
-  }, [devUser, getCredentials]);
+  }, [getCredentials]);
 
   useEffect(() => {
     setAccessTokenProvider(getAccessToken);
@@ -71,38 +83,82 @@ export function useAuth(): AuthSession {
   }, [getAccessToken]);
 
   useEffect(() => {
-    displayName = devUser ? 'Dev User' : (user?.name ?? user?.email ?? null);
-  }, [devUser, user]);
+    displayName = user?.name ?? user?.email ?? null;
+  }, [user]);
 
   const signIn = useCallback(async (): Promise<void> => {
-    if (!devUser) {
-      await authorize({ audience: config.auth0Audience, scope: AUTH0_SCOPE });
-    }
+    await authorize({ audience: config.auth0Audience, scope: AUTH0_SCOPE });
     // `POST /me/bootstrap` itself runs in `useMe()`, which is idempotent and fires as
     // soon as this invalidation lands — by then Auth0 has populated `user.name`.
     await queryClient.invalidateQueries({ queryKey: ['me'] });
-  }, [authorize, devUser, queryClient]);
+  }, [authorize, queryClient]);
 
   const signOut = useCallback(async (): Promise<void> => {
-    if (!devUser) {
-      await clearSession();
-      await clearCredentials();
-    }
+    await clearSession();
+    await clearCredentials();
     displayName = null;
     queryClient.clear();
-  }, [clearCredentials, clearSession, devUser, queryClient]);
+  }, [clearCredentials, clearSession, queryClient]);
 
   return useMemo<AuthSession>(
     () => ({
-      isAuthenticated: devUser ? true : user !== null,
-      isLoading: devUser ? false : isLoading,
-      name: devUser ? 'Dev User' : (user?.name ?? null),
-      email: devUser ?? user?.email ?? null,
-      isDevSession: devUser !== null,
-      error: devUser ? null : (error ?? null),
+      isAuthenticated: user !== null,
+      isLoading,
+      name: user?.name ?? null,
+      email: user?.email ?? null,
+      isDevSession: false,
+      error: error ?? null,
       signIn,
       signOut,
     }),
-    [devUser, error, isLoading, signIn, signOut, user],
+    [error, isLoading, signIn, signOut, user],
   );
 }
+
+/**
+ * The synthetic `EXPO_PUBLIC_DEV_USER` session: always signed in, and it never touches
+ * `react-native-auth0`, so it runs in Expo Go.
+ */
+function useDevAuth(): AuthSession {
+  const queryClient = useQueryClient();
+  const devUser = config.devUser ?? '';
+
+  useEffect(() => {
+    // No bearer token exists — `api.ts` sends the `x-dev-user` header instead.
+    setAccessTokenProvider(async () => null);
+    return () => setAccessTokenProvider(null);
+  }, []);
+
+  useEffect(() => {
+    displayName = 'Dev User';
+  }, []);
+
+  const signIn = useCallback(async (): Promise<void> => {
+    await queryClient.invalidateQueries({ queryKey: ['me'] });
+  }, [queryClient]);
+
+  const signOut = useCallback(async (): Promise<void> => {
+    displayName = null;
+    queryClient.clear();
+  }, [queryClient]);
+
+  return useMemo<AuthSession>(
+    () => ({
+      isAuthenticated: true,
+      isLoading: false,
+      name: 'Dev User',
+      email: devUser,
+      isDevSession: true,
+      error: null,
+      signIn,
+      signOut,
+    }),
+    [devUser, signIn, signOut],
+  );
+}
+
+/**
+ * Picked once at module scope, not per render: `config.devUser` is inlined at bundle
+ * time and cannot change while the process lives, so hook order stays stable.
+ */
+export const useAuth: () => AuthSession = config.devUser ? useDevAuth : useRealAuth;

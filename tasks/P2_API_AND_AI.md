@@ -126,4 +126,29 @@ Railway: new project from repo, root `apps/api`, build `pnpm install && pnpm --f
 - [ ] Deployed URL passes the above.
 
 ## 11. Requests to other owners / Implementation notes
-(append here)
+
+### Implementation notes (P2)
+
+Built: pnpm monorepo, `@petplate/shared` (existing `types.ts` + `constants.ts` from ALGORITHMS §7), Hono API with config/pino/`AppError`, Auth0 JWT + `DEV_BYPASS_AUTH`/`x-dev-user`, all DATA_MODEL models, `/me/bootstrap|profile|today`, photos, Grok vision (8s, canned fallback), USDA FDC cache + scale, Nutritionix optional fallback, meals analyze/CRUD, gaps, meal-plan generate+verify (one retry), `seed:demo`, vitest for `day` / `scaleNutrients` / `sumNutrients` / `gaps` / `enrichItems`. Stretch: 60 req/min rate limit, `x-request-id`. Atlas Search not done.
+
+**Demo plate:** photograph grilled chicken breast + brown rice + steamed broccoli on a ~27 cm plate. `DEMO_MODE=true` returns `chicken_rice_broccoli` if Grok times out.
+
+**Run:** `pnpm install && pnpm --filter @petplate/shared build && pnpm --filter api dev`. Auth: `DEV_BYPASS_AUTH=true` and `x-dev-user: demo@petplate.app`. Seed: `pnpm --filter api seed:demo`.
+
+**Deploy (config only, not live):** root `Dockerfile`, `railway.json`, `fly.toml`. Build `pnpm install && pnpm --filter @petplate/shared build && pnpm --filter api build`. Start `pnpm --filter api start`. Health: `/api/health`.
+
+**Stubs P3 must replace:** `services/targets/human.ts`, `services/targets/pet.ts`, `services/scoring/*`. Current copies implement ALGORITHMS enough for `/me/profile`, meal scores, and seed. `recomputeDay` is called from meal writes and from `GET /me/today` when the row is missing (P2 task). P3 `/pets` should import `buildToday` from `services/today.ts`.
+
+### Requests to other owners
+
+- **P3:** Replace scoring/targets stubs; keep `recomputeDay(userId, dayKey)` and `computeHumanTargets` / `computePetTargets` signatures. After merge, re-run `seed:demo` so streak/combined match ALGORITHMS. Mount `/pets`, `/weighins`, `/scores`.
+- **P4:** Mount `/avatar` and `/voice`. `buildToday` already maps `pets.avatar.*PhotoId` → `/api/photos/<id>`.
+- **P1:** API base `/api`. Analyze is multipart field `photo` plus optional `hint`. Unauthenticated → `{ error: { code, message } }`.
+
+### Integrator notes (P1+P2 merge)
+
+`POST /pets` stub lives in `apps/api/src/routes/pets.ts` so mobile onboarding works
+before P3 lands — **P3 should replace that file**, not merge into it. Photo GET also
+accepts `?devUser=` / `?access_token=` for `expo-image`. Shared stays source-first for
+Metro (`main: ./src/index.ts`) and still builds CJS+ESM `dist/` via tsup for `api start`.
+

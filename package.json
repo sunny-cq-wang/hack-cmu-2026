@@ -8,9 +8,10 @@
   },
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
-    "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test",
-    "lint": "pnpm -r run lint"
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm -r --if-present run test",
+    "lint": "pnpm -r --if-present run lint",
+    "build:api": "pnpm --filter @petplate/shared build && pnpm --filter api build"
   },
   "devDependencies": {
     "typescript": "~6.0.3"

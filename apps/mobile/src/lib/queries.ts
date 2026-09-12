@@ -27,6 +27,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { File } from 'expo-file-system';
 
 import { api, LONG_TIMEOUT_MS, qs } from './api';
 import { currentDisplayName, deviceTimezone, useAuth } from './auth';
@@ -136,9 +137,12 @@ export function useAnalyzeMeal(): UseMutationResult<MealDraft, Error, AnalyzeMea
   return useMutation({
     mutationFn: ({ uri, hint }: AnalyzeMealInput) => {
       const form = new FormData();
-      // why: React Native's FormData takes a {uri,name,type} descriptor where the DOM
-      // expects a Blob; there is no shared type for it.
-      form.append('photo', { uri, name: 'meal.jpg', type: 'image/jpeg' } as unknown as Blob);
+      // why: Expo installs a WinterCG `fetch` that replaces React Native's, and it
+      // encodes multipart itself — it accepts only a string, a Blob, or something with
+      // `bytes()`, and throws "Unsupported FormDataPart implementation" on RN's
+      // {uri,name,type} descriptor. `File` from expo-file-system implements Blob and
+      // streams straight off disk, so the JPEG is never held in JS memory.
+      form.append('photo', new File(uri) as unknown as Blob);
       if (hint) {
         form.append('hint', hint);
       }
@@ -147,6 +151,9 @@ export function useAnalyzeMeal(): UseMutationResult<MealDraft, Error, AnalyzeMea
         body: form,
         multipart: true,
         schema: MealDraftSchema,
+        // Photo upload plus Grok vision plus USDA enrichment; the 20 s default aborts
+        // the request while the server is still within its own budget.
+        timeoutMs: LONG_TIMEOUT_MS,
       });
     },
   });

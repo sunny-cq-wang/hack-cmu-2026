@@ -357,3 +357,25 @@ is a follow-up commit on this branch.
 - `pnpm typecheck` — clean (shared + mobile).
 - `npx expo export --platform android` — bundled 3791 modules, wrote `apps/mobile/dist`
   (gitignored). Metro was not left running. No `expo prebuild` / `run:android`.
+
+### Integration with P2 (`origin/DiQiu-api_and_ai`)
+
+Merged P2 onto P1 `main` on branch `p1/integrate-p2`. Workspace conflicts were resolved in
+P1's favor (pnpm 10.34.5, hoisted `node_modules`, TypeScript ~6, zod `^3.25.76`, Expo
+source-first `@petplate/shared`) while taking P2's `constants.ts`, vitest, tsup `dist/`
+build, Hono API, and deploy files.
+
+Wiring that was not in either branch alone:
+- `apps/api/src/routes/pets.ts` — `POST /pets` stub so P1 onboarding can finish. P3
+  replaces this file.
+- `GET /photos/:id` accepts `?devUser=` / `?access_token=` (expo-image cannot send
+  `Authorization`). `MealList` appends those from `authHeaders()`.
+- Root scripts use `--if-present` so mobile (no `test`/`lint`) does not fail `pnpm test`.
+- Docker install is `--filter @petplate/shared --filter api` so the image does not need
+  the Expo app.
+
+**Run both sides:** copy root `.env.example` → `.env` and `apps/mobile/.env.example` →
+`apps/mobile/.env`. Then `pnpm install && pnpm --filter @petplate/shared build &&
+pnpm --filter api dev` plus `pnpm --filter mobile start`. Pair
+`DEV_BYPASS_AUTH=true` with `EXPO_PUBLIC_DEV_USER`. `EXPO_PUBLIC_MOCK_API=true` still
+bypasses the network entirely.
