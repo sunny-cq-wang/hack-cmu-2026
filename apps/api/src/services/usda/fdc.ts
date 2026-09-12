@@ -106,7 +106,8 @@ async function searchUsda(query: string): Promise<FdcFood[]> {
   return Array.isArray(foods) ? foods : [];
 }
 
-async function writeCache(queryKey: string, lookup: FdcLookup): Promise<void> {
+/** The `foods` collection caches every per-100 g source, not just USDA — see `nutrition/estimate.ts`. */
+export async function writeFoodCache(queryKey: string, lookup: FdcLookup): Promise<void> {
   await FoodModel.findOneAndUpdate(
     { queryKey },
     {
@@ -131,11 +132,16 @@ function fromCacheDoc(doc: { fdcId: number; description: string; per100g: Nutrie
   };
 }
 
+export async function readFoodCache(queryKey: string): Promise<FdcLookup | null> {
+  const doc = await FoodModel.findOne({ queryKey });
+  return doc ? fromCacheDoc(doc) : null;
+}
+
 export async function lookupFood(query: string): Promise<FdcLookup | null> {
   const queryKey = normalizeQueryKey(query);
   if (!queryKey) return null;
-  const cached = await FoodModel.findOne({ queryKey });
-  if (cached) return fromCacheDoc(cached);
+  const cached = await readFoodCache(queryKey);
+  if (cached) return cached;
 
   let foods = await searchUsda(queryKey);
   let picked = pickFood(queryKey, foods);
@@ -159,15 +165,15 @@ export async function lookupFood(query: string): Promise<FdcLookup | null> {
     per100g,
     dataType: picked.dataType ?? 'unknown',
   };
-  await writeCache(queryKey, lookup);
-  await writeCache(`fdc:${lookup.fdcId}`, lookup);
+  await writeFoodCache(queryKey, lookup);
+  await writeFoodCache(`fdc:${lookup.fdcId}`, lookup);
   return lookup;
 }
 
 export async function lookupFoodByFdcId(fdcId: number): Promise<FdcLookup | null> {
   const queryKey = `fdc:${fdcId}`;
-  const cached = await FoodModel.findOne({ queryKey });
-  if (cached) return fromCacheDoc(cached);
+  const cached = await readFoodCache(queryKey);
+  if (cached) return cached;
   if (!allowUsdaCall()) return null;
   const url = `${FOOD_URL}/${fdcId}?api_key=${encodeURIComponent(config.USDA_API_KEY)}`;
   const json = await usdaGet(url);
@@ -180,6 +186,6 @@ export async function lookupFoodByFdcId(fdcId: number): Promise<FdcLookup | null
     per100g: nutrientsFromFdc(food.foodNutrients),
     dataType: food.dataType ?? 'unknown',
   };
-  await writeCache(queryKey, lookup);
+  await writeFoodCache(queryKey, lookup);
   return lookup;
 }

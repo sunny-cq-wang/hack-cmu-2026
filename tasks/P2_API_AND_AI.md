@@ -152,3 +152,44 @@ before P3 lands — **P3 should replace that file**, not merge into it. Photo GE
 accepts `?devUser=` / `?access_token=` for `expo-image`. Shared stays source-first for
 Metro (`main: ./src/index.ts`) and still builds CJS+ESM `dist/` via tsup for `api start`.
 
+### Grok nutrition estimate for foods USDA does not carry
+
+`services/nutrition/estimate.ts` is a fourth tier under USDA-by-id, USDA-by-query and
+Nutritionix: `estimatePer100g(query)` asks `GROK_CHAT_MODEL` for kcal plus protein, fat,
+carbs and fiber per 100 g, and `enrichOne` scales that by grams and returns
+`matchSource: 'grok_estimate'`. Macros are included because `humanScore()` awards a
+protein bonus, so a kcal-only estimate silently costs the user score; micronutrients
+stay 0 so `/nutrition/gaps` is never fed guessed micros.
+
+Why it was needed: `POST /meals` only receives `{ name, grams, fdcId }`, so the vision
+model's `estimatedKcal` from the analyze step never reaches the save path. A food USDA
+does not carry used to be **saved as 0 kcal**. Re-deriving nutrition from the food name
+server-side fixes that without adding a request field, so `packages/shared` stays frozen.
+`/mealplans/generate`, which never passed `estimatedKcal` at all, gets the same benefit.
+
+Details an integrator should know:
+
+- Cached in the same `foods` collection as USDA, under its own `grok:<normalized name>`
+  key namespace with `fdcId: 0, dataType: 'grok_estimate'`. Repeating a food is free and
+  editing grams re-scales rather than re-asking. `fdc.ts` now exports `readFoodCache` /
+  `writeFoodCache` (formerly module-private `fromCacheDoc` / `writeCache`) so both
+  sources share one cache path.
+- 6 s timeout — shorter than vision's 25 s because this sits on the meal-save path. An
+  attempted call that fails answers from `CANNED_ESTIMATE_PER_100G` under `DEMO_MODE`.
+  Without an `XAI_API_KEY` it returns `null` without calling, and `enrichOne` falls back
+  to the vision `estimatedKcal` (still marked `grok_estimate`), which is a better
+  per-item number than any generic stand-in. That generic only applies as the true last
+  resort, in `DEMO_MODE` for an item that never went through vision — otherwise a
+  keyless demo save would log 0 kcal again.
+- `sanitizePer100g` is pure and unit tested (`test/estimate.test.ts`): it rejects kcal
+  that is 0, negative, non-finite or above 900 per 100 g, clamps macros to 0-100 g,
+  caps fiber at total carbohydrate, and keeps `kcal` over a disagreeing 4/4/9 macro sum.
+- **Touches P1's area** (`apps/mobile/src/features/meals/**`) to surface the marker,
+  which nothing read before: `DraftItem` now carries `matchSource` (null for hand-added
+  items), `ItemRow` shows an "AI estimate — not in USDA" chip, `MealList` adds a
+  per-meal footnote counting estimated items, and the `AnalyzeSheet` totals caption no
+  longer promises USDA for every item.
+- `docs/INTEGRATIONS.md` §3 ("If still zero, `matchSource = 'grok_estimate'` and set
+  only `kcal` from `estimatedKcal`") is now stale — that is the last resort, not the
+  first fallback. `docs/**` is human-owned, so it is left for a human to update.
+

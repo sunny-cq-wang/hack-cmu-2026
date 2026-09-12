@@ -78,6 +78,10 @@ export function ItemRow({ item, onChange }: ItemRowProps): React.JSX.Element {
         </Pressable>
       </View>
 
+      {item.matchSource === 'grok_estimate' ? (
+        <Chip label="AI estimate — not in USDA" tone={colors.okay} />
+      ) : null}
+
       {item.confidence < LOW_CONFIDENCE ? (
         <Chip label={`${Math.round(item.confidence * 100)}% sure — check this one`} tone={colors.okay} />
       ) : null}

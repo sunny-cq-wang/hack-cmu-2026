@@ -1,4 +1,4 @@
-import { VisionResultSchema, type VisionResult } from '@petplate/shared';
+import { NutrientsSchema, emptyNutrients, VisionResultSchema, type Nutrients, type VisionResult } from '@petplate/shared';
 
 /** Demo team: photograph grilled chicken breast + brown rice + steamed broccoli on a ~27 cm plate. */
 export const FIXTURES = {
@@ -51,3 +51,17 @@ export type FixtureName = keyof typeof FIXTURES;
 export function canned(_jpeg: Buffer): VisionResult {
   return FIXTURES.chicken_rice_broccoli;
 }
+
+/**
+ * Stands in for a Grok per-100 g estimate when the chat call is unavailable in
+ * DEMO_MODE. A middle-of-the-road cooked mixed dish, so a food USDA does not carry
+ * still lands on the plate with a believable number instead of 0 kcal.
+ */
+export const CANNED_ESTIMATE_PER_100G: Nutrients = NutrientsSchema.parse({
+  ...emptyNutrients(),
+  kcal: 180,
+  proteinG: 8,
+  fatG: 7,
+  carbsG: 21,
+  fiberG: 2,
+});

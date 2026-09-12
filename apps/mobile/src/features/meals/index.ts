@@ -7,6 +7,7 @@ export {
   manualItem,
   toDraftItems,
   type DraftItem,
+  type MatchSource,
 } from './draft';
 export { ItemEditor, type ItemEditorProps } from './ItemEditor';
 export { ItemRow, type ItemRowProps } from './ItemRow';

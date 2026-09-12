@@ -2,7 +2,10 @@
  * The editable shape behind `AnalyzeSheet`. `MealDraft` is what the server sends;
  * `DraftItem` is that plus the bookkeeping a grams stepper needs.
  */
-import { MealDraftSchema, emptyNutrients, type MealDraft } from '@petplate/shared';
+import { MealDraftSchema, emptyNutrients, type MealDraft, type MealItem } from '@petplate/shared';
+
+/** `@petplate/shared` is frozen and ships no alias for it, so read it off `MealItem`. */
+export type MatchSource = MealItem['matchSource'];
 
 export interface DraftItem {
   /** Stable list key — names are not unique and the user can edit grams freely. */
@@ -14,6 +17,8 @@ export interface DraftItem {
   kcalAtSourceGrams: number;
   confidence: number;
   fdcId: number | null;
+  /** Where the numbers came from. Null for hand-added items — nothing priced them yet. */
+  matchSource: MatchSource | null;
 }
 
 /** Grams a hand-added item starts at (tasks/P1_MOBILE_CORE.md §4). */
@@ -34,6 +39,7 @@ export function toDraftItems(draft: MealDraft): DraftItem[] {
     kcalAtSourceGrams: item.nutrients.kcal,
     confidence: item.confidence,
     fdcId: item.fdcId,
+    matchSource: item.matchSource,
   }));
 }
 
@@ -46,6 +52,7 @@ export function manualItem(name: string): DraftItem {
     kcalAtSourceGrams: 0,
     confidence: 1,
     fdcId: null,
+    matchSource: null,
   };
 }
 

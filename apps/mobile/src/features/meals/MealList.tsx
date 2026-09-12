@@ -30,6 +30,18 @@ function loggedAtLabel(meal: Meal): string {
   return new Date(meal.loggedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+/**
+ * Items USDA does not carry are priced by Grok instead, so say so rather than letting
+ * an estimate pass for a database number.
+ */
+function estimateNotice(meal: Meal): string | null {
+  const count = meal.items.filter((item) => item.matchSource === 'grok_estimate').length;
+  if (count === 0) {
+    return null;
+  }
+  return `${count} ${count === 1 ? 'item' : 'items'} estimated by AI — not in USDA`;
+}
+
 export function MealList({ dayKey }: MealListProps): React.JSX.Element {
   const meals = useMeals(dayKey);
   const deleteMeal = useDeleteMeal();
@@ -89,6 +101,7 @@ export function MealList({ dayKey }: MealListProps): React.JSX.Element {
       {deleteError ? <Text style={styles.error}>{deleteError}</Text> : null}
       {meals.data.map((meal) => {
         const uri = photoSource(meal.photoUrl, photoQuery);
+        const notice = estimateNotice(meal);
         return (
           <SwipeToDelete key={meal.id} onDelete={() => remove(meal.id)} disabled={deleteMeal.isPending}>
             <Card style={styles.row}>
@@ -109,6 +122,11 @@ export function MealList({ dayKey }: MealListProps): React.JSX.Element {
                 <Text style={typography.label}>
                   {Math.round(meal.totals.kcal)} kcal · {Math.round(meal.totals.proteinG)} g protein
                 </Text>
+                {notice ? (
+                  <Text style={styles.estimate} numberOfLines={1}>
+                    {notice}
+                  </Text>
+                ) : null}
               </View>
             </Card>
           </SwipeToDelete>
@@ -126,4 +144,5 @@ const styles = StyleSheet.create({
   thumbFallback: { alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1, gap: 2 },
   error: { ...typography.caption, color: colors.drooping },
+  estimate: { ...typography.caption, color: colors.okay },
 });

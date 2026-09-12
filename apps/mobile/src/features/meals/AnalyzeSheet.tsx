@@ -115,7 +115,8 @@ export function AnalyzeSheet({
         <View style={styles.totals}>
           <Text style={typography.heading}>≈ {estimatedTotalKcal} kcal</Text>
           <Text style={typography.caption}>
-            Estimate only — the server recalculates every item from USDA when you save.
+            Estimate only — the server re-prices every item when you save, from USDA where it has
+            the food and from AI where it does not.
           </Text>
         </View>
 
