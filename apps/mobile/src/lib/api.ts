@@ -184,6 +184,9 @@ export async function api<S extends z.ZodTypeAny>(path: string, init: ApiInit<S>
       path,
       method,
       ms: Date.now() - startedAt,
+      // why: without the cause a multipart failure is indistinguishable from being
+      // offline — both surface as the same generic notice.
+      cause: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     });
     throw aborted
       ? new ApiError('UPSTREAM_TIMEOUT', `${path} timed out after ${timeoutMs} ms.`, 504)

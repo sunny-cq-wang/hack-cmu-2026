@@ -3,7 +3,14 @@ import {
   emptyNutrients,
   type TodaySummary,
 } from '@petplate/shared';
-import { MealModel, PetModel, UserModel, DailyScoreModel, FeedingModel } from '../db/models';
+import {
+  MealModel,
+  PetModel,
+  UserModel,
+  DailyScoreModel,
+  FeedingModel,
+  type AdjustmentLogEntry,
+} from '../db/models';
 import { photoUrl } from '../db/models/helpers';
 import { dayKey } from '../lib/day';
 import { AppError } from '../lib/errors';
@@ -32,14 +39,21 @@ export async function buildToday(userId: string): Promise<TodaySummary> {
 
   const userLog = user.targets?.adjustmentLog ?? [];
   const petLog = pet?.targets.adjustmentLog ?? [];
-  const adjustments = [...userLog.map((e) => ({ ...e, subject: 'user' as const })), ...petLog.map((e) => ({ ...e, subject: 'pet' as const }))]
-    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+  // Read field-by-field, never by spread: these are Mongoose subdocuments, so `{ ...e }`
+  // copies internal props instead of the schema fields and loses `at` entirely.
+  const entry = (e: AdjustmentLogEntry, subject: 'user' | 'pet') => ({
+    subject,
+    message: e.message ?? '',
+    at: e.at instanceof Date ? e.at : new Date(e.at),
+  });
+  const adjustments = [
+    ...userLog.map((e) => entry(e, 'user')),
+    ...petLog.map((e) => entry(e, 'pet')),
+  ]
+    .filter((e) => !Number.isNaN(e.at.getTime()))
+    .sort((a, b) => b.at.getTime() - a.at.getTime())
     .slice(0, 3)
-    .map((e) => ({
-      subject: e.subject,
-      message: e.message,
-      at: e.at instanceof Date ? e.at.toISOString() : new Date(e.at).toISOString(),
-    }));
+    .map((e) => ({ subject: e.subject, message: e.message, at: e.at.toISOString() }));
 
   return TodaySummarySchema.parse({
     dayKey: key,

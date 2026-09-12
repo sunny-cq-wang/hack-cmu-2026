@@ -38,6 +38,13 @@ const VISION_JSON_SCHEMA = {
   },
 } as const;
 
+/**
+ * Vision gets its own budget rather than the 8 s client default: a real plate photo
+ * costs several seconds of upload plus inference, and a timeout here throws away the
+ * whole analysis. Per-request so other `grok` callers keep their own limits.
+ */
+const VISION_TIMEOUT_MS = 25_000;
+
 function isTimeout(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const name = 'name' in err ? String(err.name) : '';
@@ -71,7 +78,7 @@ async function complete(jpeg: Buffer, hint: string | undefined, repair?: string)
         type: 'json_schema',
         json_schema: VISION_JSON_SCHEMA,
       } as never,
-    });
+    }, { timeout: VISION_TIMEOUT_MS });
     return res.choices[0]?.message.content ?? null;
   } catch (err) {
     log.warn({ err }, 'vision json_schema failed, retrying json_object');
@@ -82,7 +89,7 @@ async function complete(jpeg: Buffer, hint: string | undefined, repair?: string)
         { role: 'user', content: userContent },
       ],
       response_format: { type: 'json_object' },
-    });
+    }, { timeout: VISION_TIMEOUT_MS });
     return res.choices[0]?.message.content ?? null;
   }
 }
