@@ -158,9 +158,11 @@ export function getActiveDevUser(): string | null {
 }
 
 export async function authHeaders(): Promise<Record<string, string>> {
-  if (config.devUser) {
-    // Pairs with DEV_BYPASS_AUTH=true on the API (.env.example).
-    lastAuthHeaders = activeDevUser ? { 'x-dev-user': activeDevUser } : {};
+  // Set by the dev session (DEV_BYPASS_AUTH) and by the demo account door, which the
+  // API keeps open for one hardcoded address. Either way it wins over a bearer token,
+  // because in both cases there is no Auth0 session to draw a token from.
+  if (activeDevUser) {
+    lastAuthHeaders = { 'x-dev-user': activeDevUser };
     return lastAuthHeaders;
   }
   const token = await accessTokenProvider?.();
