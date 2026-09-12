@@ -144,11 +144,23 @@ export function apiUrl(pathOrUrl: string): string {
  * rather than primed by a separate wiring step that can be forgotten.
  */
 let lastAuthHeaders: Record<string, string> = config.devUser ? { 'x-dev-user': config.devUser } : {};
+/** When `EXPO_PUBLIC_DEV_USER` is set, this is the email sent as `x-dev-user`. */
+let activeDevUser: string | null = config.devUser;
+
+/** Swap or clear the synthetic identity without rebuilding. Null = signed out. */
+export function setActiveDevUser(email: string | null): void {
+  activeDevUser = email;
+  lastAuthHeaders = email ? { 'x-dev-user': email } : {};
+}
+
+export function getActiveDevUser(): string | null {
+  return activeDevUser;
+}
 
 export async function authHeaders(): Promise<Record<string, string>> {
   if (config.devUser) {
     // Pairs with DEV_BYPASS_AUTH=true on the API (.env.example).
-    lastAuthHeaders = { 'x-dev-user': config.devUser };
+    lastAuthHeaders = activeDevUser ? { 'x-dev-user': activeDevUser } : {};
     return lastAuthHeaders;
   }
   const token = await accessTokenProvider?.();

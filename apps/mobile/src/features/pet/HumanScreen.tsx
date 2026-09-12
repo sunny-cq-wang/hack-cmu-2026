@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { colors, usePetPagePad } from './theme';
 import { HumanForm } from './HumanForm';
 import { WeighInSheet } from './WeighInSheet';
 import { WeightChart } from './WeightChart';
 import { AdjustmentHistory } from './AdjustmentHistory';
+import { useAuth } from '../../lib/auth';
 import { useMe, useToday, useWeighIns } from './queries';
 
 function goalLabel(goal: 'lose' | 'maintain' | 'gain', targetKg: number | null): string {
@@ -15,12 +17,19 @@ function goalLabel(goal: 'lose' | 'maintain' | 'gain', targetKg: number | null):
 
 export function HumanScreen() {
   const pagePad = usePetPagePad();
+  const router = useRouter();
+  const { signOut, isDevSession } = useAuth();
   const todayQ = useToday();
   const meQ = useMe();
   const userWeigh = useWeighIns('user');
   const [sheet, setSheet] = useState(false);
   const [toast, setToast] = useState<{ message: string; vet: boolean } | null>(null);
   const [editing, setEditing] = useState(false);
+
+  async function onSignOut() {
+    await signOut();
+    router.replace('/(auth)/login');
+  }
 
   if (todayQ.isLoading || meQ.isLoading) {
     return (
@@ -115,6 +124,15 @@ export function HumanScreen() {
         <Text style={styles.secondaryText}>Log my weigh-in</Text>
       </Pressable>
       <AdjustmentHistory items={today.adjustments} subject="user" />
+      <Pressable onPress={() => void onSignOut()} accessibilityRole="button" accessibilityLabel="Sign out">
+        <Text style={styles.link}>Sign out</Text>
+      </Pressable>
+      {isDevSession ? (
+        <Text style={styles.footer}>
+          Sign out, then choose “Start onboarding” to record the first-run flow. The seeded demo
+          account stays on the server.
+        </Text>
+      ) : null}
       <Text style={styles.footer}>
         Calorie targets are estimates. Not medical advice — confirm with your clinician.
       </Text>

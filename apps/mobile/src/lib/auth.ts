@@ -12,9 +12,9 @@
  * real implementation is pulled in only when there is no dev user.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { setAccessTokenProvider } from './api';
+import { getActiveDevUser, setAccessTokenProvider, setActiveDevUser } from './api';
 import { config } from './config';
 import { log } from './log';
 
@@ -44,7 +44,7 @@ export interface AuthSession {
   /** True when the synthetic `EXPO_PUBLIC_DEV_USER` session is in play. */
   isDevSession: boolean;
   error: Error | null;
-  signIn: () => Promise<void>;
+  signIn: (opts?: { fresh?: boolean }) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -86,7 +86,7 @@ function useRealAuth(): AuthSession {
     displayName = user?.name ?? user?.email ?? null;
   }, [user]);
 
-  const signIn = useCallback(async (): Promise<void> => {
+  const signIn = useCallback(async (_opts?: { fresh?: boolean }): Promise<void> => {
     await authorize({ audience: config.auth0Audience, scope: AUTH0_SCOPE });
     // `POST /me/bootstrap` itself runs in `useMe()`, which is idempotent and fires as
     // soon as this invalidation lands — by then Auth0 has populated `user.name`.
@@ -116,12 +116,32 @@ function useRealAuth(): AuthSession {
 }
 
 /**
- * The synthetic `EXPO_PUBLIC_DEV_USER` session: always signed in, and it never touches
- * `react-native-auth0`, so it runs in Expo Go.
+ * Shared across every `useDevAuth()` caller so Sign out on You and the login
+ * screen see the same session. `demo@petplate.app` stays in Mongo; a fresh
+ * onboarding run mints a new `x-dev-user` email instead of wiping it.
+ */
+let devSessionSignedIn = true;
+const devSessionListeners = new Set<() => void>();
+
+function notifyDevSession(): void {
+  for (const listener of devSessionListeners) listener();
+}
+
+/**
+ * The synthetic `EXPO_PUBLIC_DEV_USER` session. It never touches
+ * `react-native-auth0`, so it runs in Expo Go. Sign-out is local only.
  */
 function useDevAuth(): AuthSession {
   const queryClient = useQueryClient();
-  const devUser = config.devUser ?? '';
+  const [, rerender] = useState(0);
+
+  useEffect(() => {
+    const listener = (): void => rerender((n) => n + 1);
+    devSessionListeners.add(listener);
+    return () => {
+      devSessionListeners.delete(listener);
+    };
+  }, []);
 
   useEffect(() => {
     // No bearer token exists — `api.ts` sends the `x-dev-user` header instead.
@@ -130,30 +150,42 @@ function useDevAuth(): AuthSession {
   }, []);
 
   useEffect(() => {
-    displayName = 'Dev User';
+    if (devSessionSignedIn) {
+      displayName = getActiveDevUser() === config.devUser ? 'Dev User' : 'New user';
+    }
   }, []);
 
-  const signIn = useCallback(async (): Promise<void> => {
+  const signIn = useCallback(async (opts?: { fresh?: boolean }): Promise<void> => {
+    const email = opts?.fresh ? `onboard.${Date.now()}@petplate.app` : (config.devUser ?? '');
+    setActiveDevUser(email);
+    displayName = opts?.fresh ? 'New user' : 'Dev User';
+    queryClient.clear();
+    devSessionSignedIn = true;
+    notifyDevSession();
     await queryClient.invalidateQueries({ queryKey: ['me'] });
   }, [queryClient]);
 
   const signOut = useCallback(async (): Promise<void> => {
+    setActiveDevUser(null);
     displayName = null;
     queryClient.clear();
+    devSessionSignedIn = false;
+    notifyDevSession();
   }, [queryClient]);
 
+  const email = getActiveDevUser();
   return useMemo<AuthSession>(
     () => ({
-      isAuthenticated: true,
+      isAuthenticated: devSessionSignedIn,
       isLoading: false,
-      name: 'Dev User',
-      email: devUser,
+      name: displayName,
+      email,
       isDevSession: true,
       error: null,
       signIn,
       signOut,
     }),
-    [devUser, signIn, signOut],
+    [email, signIn, signOut],
   );
 }
 

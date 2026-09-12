@@ -12,11 +12,11 @@ export default function Login(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const onPress = async (): Promise<void> => {
+  const onPress = async (fresh = false): Promise<void> => {
     setBusy(true);
     setError(null);
     try {
-      await signIn();
+      await signIn({ fresh });
       router.replace('/');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Sign-in was cancelled.');
@@ -37,11 +37,24 @@ export default function Login(): React.JSX.Element {
 
       <View style={styles.actions}>
         <Button
-          title={isDevSession ? 'Continue (dev user)' : 'Continue with Auth0'}
-          onPress={() => void onPress()}
+          title={isDevSession ? 'Continue as demo user' : 'Continue with Auth0'}
+          onPress={() => void onPress(false)}
           loading={busy}
         />
+        {isDevSession ? (
+          <Button
+            title="Start onboarding (new account)"
+            onPress={() => void onPress(true)}
+            loading={busy}
+            variant="secondary"
+          />
+        ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
+        {isDevSession ? (
+          <Text style={[typography.caption, styles.disclaimer]}>
+            New account leaves the seeded demo user on the server so you can come back to it.
+          </Text>
+        ) : null}
         <Text style={[typography.caption, styles.disclaimer]}>Not medical or veterinary advice.</Text>
       </View>
     </SafeAreaView>
