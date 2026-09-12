@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PetRecord } from '../src/db/types';
 import { emptyPetAvatar } from '../src/db/types';
+import { CONSISTENCY_PREFIX } from '../src/services/imagine/prompts';
 
 const generateImage = vi.fn(async () => Buffer.from('generated'));
 const editImage = vi.fn(async () => Buffer.from('edited'));
@@ -70,6 +71,7 @@ beforeEach(() => {
     name: 'Biscuit',
     species: 'dog',
     breed: 'Beagle mix',
+    avatarDescription: null,
     sex: 'male',
     neutered: true,
     ageYears: 4,
@@ -133,6 +135,30 @@ describe('startAvatarPipeline', () => {
     expect(generateImage).toHaveBeenCalledTimes(1);
     // Later states still edit, using the generated neutral as the reference.
     expect(editImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('draws a described pet from the text alone, then feeds that image forward', async () => {
+    pet.species = 'virtual';
+    pet.breed = null;
+    pet.avatarDescription = 'a round moss-green dragon with tiny gold wings';
+
+    await startAvatarPipeline('pet-1', null, 'sticker');
+
+    // Only the first image is text-only, and it is the description that is drawn.
+    expect(generateImage).toHaveBeenCalledTimes(1);
+    const neutralPrompt = generateImage.mock.calls[0]?.[0] as unknown as string;
+    expect(neutralPrompt).toContain('Turn a round moss-green dragon with tiny gold wings into');
+    expect(neutralPrompt).not.toContain('Turn a a round');
+
+    // Both derived moods are edits of the generated neutral — one reference, which
+    // is exactly the case where the identity prefix used to be dropped.
+    const calls = editImage.mock.calls as unknown as [string, Buffer[]][];
+    expect(calls).toHaveLength(2);
+    for (const [prompt, refs] of calls) {
+      expect(refs).toHaveLength(1);
+      expect(refs[0]?.toString()).toBe('generated');
+      expect(prompt.startsWith(CONSISTENCY_PREFIX)).toBe(true);
+    }
   });
 
   it('still reports ready when only some states succeed', async () => {

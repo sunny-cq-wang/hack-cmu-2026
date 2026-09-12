@@ -9,6 +9,7 @@
 import { useCallback } from 'react';
 
 import { Sheet } from '../../components/ui';
+import { useToday } from '../../lib/queries';
 import { AvatarGenerator } from './AvatarGenerator';
 
 export interface RegenerateAvatarSheetProps {
@@ -20,9 +21,13 @@ export function RegenerateAvatarSheet({ visible, onClose }: RegenerateAvatarShee
   // Remounts the generator on every open, so a sheet closed mid-run reopens on the
   // picker rather than on a stale "ready" from last time.
   const handleDone = useCallback(() => onClose(), [onClose]);
+  // An invented pet has no photo to replace — the redraw runs off its description —
+  // so the title would be promising a picker that never appears.
+  const { data: today } = useToday();
+  const title = today?.pet?.species === 'virtual' ? 'Redraw avatar' : 'New photo';
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="New photo" maxHeightRatio={0.88}>
+    <Sheet visible={visible} onClose={onClose} title={title} maxHeightRatio={0.88}>
       {visible && <AvatarGenerator mode="regenerate" onReady={handleDone} onCancel={handleDone} />}
     </Sheet>
   );

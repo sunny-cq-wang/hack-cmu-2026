@@ -122,11 +122,29 @@ export function consistencyPrefix(preset: StylePreset): string {
 }
 
 /**
- * `description` is only used for virtual pets (no source photo), where "this pet"
- * has no referent — it becomes "a <breed or description>".
+ * Owner-written descriptions arrive as anything from "shiba inu" to "a round
+ * moss-green dragon with tiny gold wings". Prefixing the first with an article
+ * reads correctly; prefixing the second gives "Turn a a round moss-green dragon",
+ * so only add the article when the text does not already open with one.
+ *
+ * The determiner has to be a whole word followed by a space: "two-tailed fox" and
+ * "andalusian cat" open with letters a determiner also starts with, and neither is
+ * one.
+ */
+const OPENS_WITH_DETERMINER = /^(a|an|the|some|my)\s/i;
+
+const article = (description: string): string => (/^[aeiou]/i.test(description) ? 'an' : 'a');
+
+const subjectFrom = (description: string): string =>
+  OPENS_WITH_DETERMINER.test(description) ? description : `${article(description)} ${description}`;
+
+/**
+ * `description` is only used when there is no source photo — an invented pet —
+ * where "this pet" has no referent. It becomes the owner's own description, or the
+ * breed, or a per-species default (see `virtualDescription`).
  */
 export function stylePrompt(preset: StylePreset, description: string | null): string {
-  const subject = description ? `a ${description}` : 'this pet';
+  const subject = description ? subjectFrom(description.trim()) : 'this pet';
   const base = STYLE_BASE[resolve(preset)].replace('{subject}', subject);
   return `${base} Keep the pet's real coat colors and markings.`;
 }
@@ -143,8 +161,27 @@ export function statePrompt(
   return withConsistencyPrefix ? `${consistencyPrefix(resolved)}${body}` : body;
 }
 
-/** Free-text describing a virtual pet, used in place of a photo. */
-export function virtualDescription(breed: string | null, species: string): string {
-  if (breed && breed.trim()) return breed.trim();
-  return species === 'cat' ? 'friendly tabby cat' : 'friendly medium-sized dog';
+/**
+ * The text that stands in for a source photo when there is none.
+ *
+ * Precedence matters: `avatarDescription` is what the owner typed in onboarding to
+ * invent this pet ("a round moss-green dragon with tiny gold wings"), so it wins
+ * over `breed`, which for a virtual pet is usually blank anyway. Only when both are
+ * empty does the per-species default keep the prompt from collapsing to "a ".
+ *
+ * Takes the pet rather than loose strings so a new precedence rule cannot be
+ * applied at one of the three call sites and forgotten at the others.
+ */
+export interface DescribablePet {
+  avatarDescription?: string | null;
+  breed?: string | null;
+  species: string;
+}
+
+export function virtualDescription(pet: DescribablePet): string {
+  const described = pet.avatarDescription?.trim();
+  if (described) return described;
+  const breed = pet.breed?.trim();
+  if (breed) return breed;
+  return pet.species === 'cat' ? 'friendly tabby cat' : 'friendly medium-sized dog';
 }

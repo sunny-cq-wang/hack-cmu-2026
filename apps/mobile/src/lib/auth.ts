@@ -14,7 +14,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { getActiveDevUser, setAccessTokenProvider, setActiveDevUser } from './api';
+import { getActiveDevUser, registerAccessTokenProvider, setActiveDevUser } from './api';
 import { config } from './config';
 import { log } from './log';
 
@@ -135,10 +135,9 @@ function useRealAuth(): AuthSession {
     }
   }, [getCredentials]);
 
-  useEffect(() => {
-    setAccessTokenProvider(getAccessToken);
-    return () => setAccessTokenProvider(null);
-  }, [getAccessToken]);
+  // Returns its own remover, so unmounting this consumer cannot deregister the token
+  // getter for the other `useAuth()` consumers that are still mounted.
+  useEffect(() => registerAccessTokenProvider(getAccessToken), [getAccessToken]);
 
   useEffect(() => {
     displayName = user?.name ?? user?.email ?? null;
@@ -229,11 +228,8 @@ function useDevAuth(): AuthSession {
     };
   }, []);
 
-  useEffect(() => {
-    // No bearer token exists — `api.ts` sends the `x-dev-user` header instead.
-    setAccessTokenProvider(async () => null);
-    return () => setAccessTokenProvider(null);
-  }, []);
+  // No bearer token exists — `api.ts` sends the `x-dev-user` header instead.
+  useEffect(() => registerAccessTokenProvider(async () => null), []);
 
   useEffect(() => {
     if (devSessionSignedIn) {

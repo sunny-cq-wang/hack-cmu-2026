@@ -138,6 +138,10 @@ export function useSavePet() {
       qc.setQueryData(['pet', res.pet.id], res.pet);
       await qc.invalidateQueries({ queryKey: ['pet'] });
       await qc.invalidateQueries({ queryKey: ['today'] });
+      // Saving the pet is what completes onboarding on a first run, so `['me']` —
+      // which `app/index.tsx` reads `onboardingComplete` from to choose between Home
+      // and /onboarding/profile — is stale from this moment unless it is refetched.
+      await qc.invalidateQueries({ queryKey: ['me'] });
     },
   });
 }

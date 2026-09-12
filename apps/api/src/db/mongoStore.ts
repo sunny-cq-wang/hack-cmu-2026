@@ -31,6 +31,7 @@ const toPet = (doc: any): PetRecord => ({
   name: doc.name,
   species: doc.species,
   breed: doc.breed ?? null,
+  avatarDescription: doc.avatarDescription ?? null,
   sex: doc.sex ?? null,
   neutered: Boolean(doc.neutered),
   ageYears: doc.ageYears ?? null,

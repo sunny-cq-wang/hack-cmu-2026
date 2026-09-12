@@ -5,6 +5,7 @@ import { WeighInModel, type StoredHumanTargets } from '../db/models';
 import { authMiddleware, type AppEnv } from '../lib/auth';
 import { dayKey } from '../lib/day';
 import { rateLimit } from '../lib/rateLimit';
+import { isOnboardingComplete } from '../services/onboarding';
 import { recomputeDay } from '../services/scoring';
 import { computeHumanTargets } from '../services/targets/human';
 import { buildToday } from '../services/today';
@@ -40,7 +41,9 @@ meRoutes.put('/profile', async (c) => {
   };
   user.profile = profile;
   user.targets = stored;
-  if (user.petId) user.onboardingComplete = true;
+  // Only ever flips to true: this is the half that lands first on a fresh run, so
+  // the pet step is what completes it (see services/onboarding.ts).
+  if (isOnboardingComplete(user)) user.onboardingComplete = true;
   await user.save();
   await WeighInModel.create({
     subjectType: 'user',

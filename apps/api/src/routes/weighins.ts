@@ -37,6 +37,7 @@ function toPetInput(p: {
   name: string;
   species: PetInput['species'];
   breed?: string | null;
+  avatarDescription?: string | null;
   sex?: 'male' | 'female' | null;
   neutered: boolean;
   ageYears?: number | null;
@@ -50,6 +51,7 @@ function toPetInput(p: {
     name: p.name,
     species: p.species,
     breed: p.breed ?? null,
+    avatarDescription: p.avatarDescription ?? null,
     sex: p.sex ?? null,
     neutered: p.neutered,
     ageYears: p.ageYears ?? null,

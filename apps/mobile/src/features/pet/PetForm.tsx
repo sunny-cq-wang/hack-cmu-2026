@@ -12,14 +12,28 @@ export function PetForm(props: {
   existing?: Pet;
   /** Leave the edit form without saving. */
   onCancel?: () => void;
-  /** Open the avatar "New photo" flow. Only shown when editing an existing pet. */
+  /** Open the avatar redraw flow. Only shown when editing an existing pet. */
   onNewPhoto?: () => void;
+  /**
+   * Species the form opens on when creating a pet. Onboarding sets this to
+   * `virtual` for the "invent one from a description" path, which has no photo and
+   * no weigh-ins — everything Grok Imagine draws comes from the description below.
+   */
+  initialSpecies?: Pet['species'];
+  /**
+   * Species the owner may pick between. Onboarding narrows it, because the choice
+   * between a real pet and an invented one is already made on the screen above:
+   * `['dog', 'cat']` there, `['virtual']` on the description path — and a single
+   * option hides the control rather than showing a segment that cannot change.
+   */
+  speciesOptions?: Pet['species'][];
 }) {
   const save = useSavePet();
   const ex = props.existing;
   const [name, setName] = useState(ex?.name ?? '');
-  const [species, setSpecies] = useState<Pet['species']>(ex?.species ?? 'dog');
+  const [species, setSpecies] = useState<Pet['species']>(ex?.species ?? props.initialSpecies ?? 'dog');
   const [breed, setBreed] = useState(ex?.breed ?? '');
+  const [avatarDescription, setAvatarDescription] = useState(ex?.avatarDescription ?? '');
   const [sex, setSex] = useState<Pet['sex']>(ex?.sex ?? 'male');
   const [neutered, setNeutered] = useState(ex?.neutered ?? true);
   const [age, setAge] = useState(ex?.ageYears != null ? String(ex.ageYears) : '');
@@ -36,9 +50,18 @@ export function PetForm(props: {
 
   const pagePad = usePetPagePad();
   const virtual = species === 'virtual';
+  const speciesOptions = props.speciesOptions ?? ['dog', 'cat', 'virtual'];
 
   async function submit() {
     setError(null);
+    // The server falls back to "friendly medium-sized dog" when a virtual pet has no
+    // description, which is the right thing for a pet created before this field
+    // existed and the wrong thing for someone who just chose to invent one: they
+    // would watch Grok Imagine draw a generic dog they never described.
+    if (virtual && avatarDescription.trim() === '') {
+      setError('Describe your pet in a few words so Grok Imagine knows what to draw.');
+      return;
+    }
     const toKg = (raw: string) => {
       const n = Number(raw);
       return kg ? n : n / LB;
@@ -46,7 +69,10 @@ export function PetForm(props: {
     const parsed = PetInputSchema.safeParse({
       name,
       species,
-      breed: breed || null,
+      breed: virtual ? null : breed || null,
+      // Only a virtual pet is drawn from words, so never let a description left
+      // behind by a species switch decide what a real pet's avatar looks like.
+      avatarDescription: virtual ? avatarDescription.trim() || null : null,
       sex,
       neutered,
       ageYears: age === '' ? null : Number(age),
@@ -69,7 +95,12 @@ export function PetForm(props: {
       const pet = PetSchema.parse(res.pet);
       setSaved(pet);
       props.onSaved(pet);
-      if (props.existing && props.existing.species !== pet.species) {
+      // A described pet's avatar IS the description, so rewording it leaves the pet
+      // showing a creature the owner just edited away. Offer the redraw immediately,
+      // exactly as a species change does.
+      const redescribed =
+        pet.species === 'virtual' && props.existing?.avatarDescription !== pet.avatarDescription;
+      if (props.existing && (props.existing.species !== pet.species || redescribed)) {
         props.onNewPhoto?.();
       }
     } catch (e) {
@@ -91,28 +122,39 @@ export function PetForm(props: {
         ) : null}
       </View>
       <Field label="Name" value={name} onChange={setName} />
-      <Seg
-        label="Species"
-        value={species}
-        options={['dog', 'cat', 'virtual']}
-        onChange={(v) => {
-          const next = v as Pet['species'];
-          if (next !== species) setBreed('');
-          setSpecies(next);
-        }}
-      />
-      <Field
-        label="Breed (optional, for the avatar)"
-        value={breed}
-        onChange={setBreed}
-        hint={
-          species === 'cat'
-            ? 'e.g. tabby, Siamese — used when drawing the avatar'
-            : species === 'virtual'
-              ? undefined
+      {speciesOptions.length > 1 ? (
+        <Seg
+          label="Species"
+          value={species}
+          options={speciesOptions}
+          onChange={(v) => {
+            const next = v as Pet['species'];
+            if (next !== species) setBreed('');
+            setSpecies(next);
+          }}
+        />
+      ) : null}
+      {virtual ? (
+        <Field
+          label="Describe them"
+          value={avatarDescription}
+          onChange={setAvatarDescription}
+          multiline
+          placeholder="a round moss-green dragon with tiny gold wings"
+          hint="Grok Imagine draws your avatar from this — there is no photo to work from, so the more specific the better."
+        />
+      ) : (
+        <Field
+          label="Breed (optional, for the avatar)"
+          value={breed}
+          onChange={setBreed}
+          hint={
+            species === 'cat'
+              ? 'e.g. tabby, Siamese — used when drawing the avatar'
               : 'e.g. Beagle mix — used when drawing the avatar'
-        }
-      />
+          }
+        />
+      )}
       <Seg label="Sex" value={sex ?? 'male'} options={['male', 'female']} onChange={(v) => setSex(v as Pet['sex'])} />
       <Pressable onPress={() => setNeutered((n) => !n)} style={styles.toggle}>
         <Text style={styles.label}>Neutered: {neutered ? 'yes' : 'no'}</Text>
@@ -131,7 +173,9 @@ export function PetForm(props: {
           />
         </>
       ) : (
-        <Text style={styles.hint}>Virtual pet uses a fixed 10 kg healthy-adult profile. No weigh-ins needed.</Text>
+        <Text style={styles.hint}>
+          Virtual pet uses a fixed 10 kg healthy-adult profile. No weigh-ins, no photo needed.
+        </Text>
       )}
       <Seg label="Activity" value={activity} options={['low', 'normal', 'high']} onChange={(v) => setActivity(v as Pet['activity'])} />
       <Seg label="Meals per day" value={meals} options={['1', '2', '3', '4']} onChange={setMeals} />
@@ -144,10 +188,10 @@ export function PetForm(props: {
           style={styles.secondary}
           onPress={props.onNewPhoto}
           accessibilityRole="button"
-          accessibilityLabel="Regenerate avatar from a new photo"
+          accessibilityLabel={virtual ? 'Redraw avatar from the description' : 'Regenerate avatar from a new photo'}
         >
           <Camera size={18} color={colors.accent} />
-          <Text style={styles.secondaryText}>New photo</Text>
+          <Text style={styles.secondaryText}>{virtual ? 'Redraw avatar' : 'New photo'}</Text>
         </Pressable>
       ) : null}
       <Pressable style={styles.btn} onPress={() => void submit()} disabled={save.isPending}>
@@ -170,6 +214,8 @@ function Field(props: {
   onChange: (v: string) => void;
   keyboard?: 'decimal-pad' | 'default';
   hint?: string;
+  placeholder?: string;
+  multiline?: boolean;
 }) {
   return (
     <View style={{ gap: 4 }}>
@@ -178,8 +224,10 @@ function Field(props: {
         value={props.value}
         onChangeText={props.onChange}
         keyboardType={props.keyboard}
+        placeholder={props.placeholder}
         placeholderTextColor={colors.muted}
-        style={styles.input}
+        multiline={props.multiline}
+        style={[styles.input, props.multiline && styles.inputMultiline]}
       />
       {props.hint ? <Text style={styles.hint}>{props.hint}</Text> : null}
     </View>
@@ -219,6 +267,7 @@ const styles = StyleSheet.create({
   secondaryText: { color: colors.accent, fontWeight: '600' },
   label: { color: colors.muted, fontSize: 13 },
   input: { backgroundColor: colors.card, color: colors.text, borderRadius: 10, padding: 12 },
+  inputMultiline: { minHeight: 88, textAlignVertical: 'top' },
   hint: { color: colors.muted, fontSize: 12 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { backgroundColor: colors.card, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16 },

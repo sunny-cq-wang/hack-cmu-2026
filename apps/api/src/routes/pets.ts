@@ -15,6 +15,7 @@ import { Pet } from '../db/models/pet';
 import { User } from '../db/models/user';
 import { Feeding } from '../db/models/feeding';
 import { WeighIn } from '../db/models/weighIn';
+import { isOnboardingComplete } from '../services/onboarding';
 import { computePetTargets } from '../services/targets/pet';
 import { recomputeDay } from '../services/scoring/recomputeDay';
 import { deleteFeeding, logFeeding } from '../services/feedings';
@@ -28,6 +29,7 @@ function toPetInput(p: {
   name: string;
   species: PetInput['species'];
   breed?: string | null;
+  avatarDescription?: string | null;
   sex?: 'male' | 'female' | null;
   neutered: boolean;
   ageYears?: number | null;
@@ -41,6 +43,7 @@ function toPetInput(p: {
     name: p.name,
     species: p.species,
     breed: p.breed ?? null,
+    avatarDescription: p.avatarDescription ?? null,
     sex: p.sex ?? null,
     neutered: p.neutered,
     ageYears: p.ageYears ?? null,
@@ -75,6 +78,7 @@ petsRoutes.post('/', async (c) => {
     name: input.name,
     species: input.species,
     breed: input.breed,
+    avatarDescription: input.avatarDescription,
     sex: input.sex,
     neutered: input.neutered,
     ageYears: input.ageYears,
@@ -98,6 +102,10 @@ petsRoutes.post('/', async (c) => {
     },
   });
   user.petId = pet._id;
+  // The pet is the second half of onboarding on a first run — the profile was saved
+  // before any pet existed, so `PUT /me/profile` could not flip this yet and nobody
+  // else would. Without it the app bounces back to /onboarding/profile every launch.
+  if (isOnboardingComplete(user)) user.onboardingComplete = true;
   await user.save();
   await WeighIn.create({
     subjectType: 'pet',

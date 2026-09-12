@@ -93,6 +93,12 @@ export const PetInputSchema = z.object({
   name: z.string().min(1),
   species: SpeciesSchema,
   breed: z.string().nullable().default(null),
+  /**
+   * Free text describing an invented pet ("a round moss-green dragon with tiny gold
+   * wings"). Only virtual pets have one: it stands in for the source photo, so the
+   * first Imagine call is text-only and the later moods are edited from its result.
+   */
+  avatarDescription: z.string().trim().max(400).nullable().default(null),
   sex: z.enum(['male', 'female']).nullable().default(null),
   neutered: z.boolean().default(true),
   ageYears: z.number().min(0).max(30).nullable().default(null),

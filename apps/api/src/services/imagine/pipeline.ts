@@ -71,13 +71,19 @@ async function renderState(
   source: Buffer | null,
   neutral: Buffer | null,
 ): Promise<string | null> {
-  const description = source ? null : virtualDescription(pet.breed, pet.species);
+  const description = source ? null : virtualDescription(pet);
 
   // Anchor last: `editImage` sends the final reference when the multi-image shape
   // is unavailable, so the generated neutral — the established character — is what
   // thriving and drooping are edited from, not the raw photo.
-  const refs = [source, state === 'neutral' ? null : neutral].filter((b): b is Buffer => b !== null);
-  const prompt = statePrompt(preset, description, state, refs.length > 1);
+  const anchor = state === 'neutral' ? null : neutral;
+  const refs = [source, anchor].filter((b): b is Buffer => b !== null);
+  // Keyed on the anchor, not on how many references there are. A described pet has
+  // no source photo, so its derived states send exactly one reference — the neutral
+  // — and the old `refs.length > 1` test dropped the identity prefix precisely when
+  // the character existed only in that image, which is what made the three moods of
+  // an invented pet come back as three different creatures.
+  const prompt = statePrompt(preset, description, state, anchor !== null);
 
   try {
     const image = refs.length > 0 ? await editImage(prompt, refs) : await generateImage(prompt);
@@ -186,7 +192,7 @@ export async function startAvatarPipeline(
       return;
     }
 
-    const description = source ? null : virtualDescription(pet.breed, pet.species);
+    const description = source ? null : virtualDescription(pet);
     await db.patchPetAvatar(petId, {
       status: 'generating',
       stylePrompt: stylePrompt(preset, description),

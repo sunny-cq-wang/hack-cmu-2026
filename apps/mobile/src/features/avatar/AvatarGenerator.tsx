@@ -2,6 +2,11 @@
  * "Meet your buddy." Uploads a pet photo, kicks off the Imagine pipeline and polls
  * until the three moods exist. Never blocks on video.
  *
+ * A pet invented in onboarding has no photo to upload: the description saved on the
+ * pet is what the server draws the first image from, so this screen shows that text
+ * back instead of a picker and submits with nothing but a style. The two derived
+ * moods are still edits of that first image, which is what keeps them one creature.
+ *
  * Two modes share every line of the picking/polling logic:
  *  - `onboarding` — the first run. Nothing exists yet, so the server's `progress`
  *    flags are an exact description of what has landed.
@@ -30,6 +35,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { AvatarStatusSchema, type AvatarInfo, type AvatarStatus } from '../../lib/shared';
 import { api, mediaUrl } from '../../lib/api';
 import { queryKeys, useToday } from '../../lib/queries';
+// P3 owns the pet queries; read-only import, for the description a virtual pet is
+// drawn from (`/me/today` carries the avatar, not the pet's own fields).
+import { usePet } from '../pet/queries';
 import { colors, radius } from '../../components/ui';
 import { authHeadersSync } from './authHeadersSync';
 
@@ -73,10 +81,12 @@ export function AvatarGenerator({
   onCancel,
 }: AvatarGeneratorProps): React.JSX.Element {
   const { data: today } = useToday();
+  const { data: pet } = usePet();
   const queryClient = useQueryClient();
   const petName = today?.pet?.name ?? 'your pet';
   const isVirtual = today?.pet?.species === 'virtual';
   const isRegenerate = mode === 'regenerate';
+  const description = isVirtual ? (pet?.avatarDescription?.trim() ?? null) : null;
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [preset, setPreset] = useState<Preset>('sticker');
@@ -196,15 +206,29 @@ export function AvatarGenerator({
       {!isRegenerate && <Text style={styles.title}>Meet your buddy.</Text>}
       <Text style={styles.subtitle}>
         {isRegenerate
-          ? `A new photo redraws all three moods. ${petName} keeps the current avatar until the new one is ready. ~1–2 minutes.`
+          ? isVirtual
+            ? `A redraw makes three fresh moods from the description. ${petName} keeps the current avatar until the new one is ready. ~1–2 minutes.`
+            : `A new photo redraws all three moods. ${petName} keeps the current avatar until the new one is ready. ~1–2 minutes.`
           : isVirtual
-            ? `Grok Imagine will invent three moods of ${petName}.`
+            ? `No photo needed — Grok Imagine draws ${petName} from your description, then poses that same drawing for the other two moods. ~1–2 minutes.`
             : `Grok Imagine is drawing three moods of ${petName} from your photo. ~1–2 minutes.`}
       </Text>
 
+      {isVirtual && description ? (
+        <View style={styles.description}>
+          <Text style={styles.descriptionLabel}>Drawing from</Text>
+          <Text style={styles.descriptionText}>{description}</Text>
+          {/* In regenerate mode the owner is already on the Pet tab, one tap from the
+              edit form, so pointing them at it reads as a dead end. */}
+          {!isRegenerate ? (
+            <Text style={styles.descriptionHint}>Edit it on the Pet tab to change how they look.</Text>
+          ) : null}
+        </View>
+      ) : null}
+
       {phase === 'picking' && (
         <>
-          {isRegenerate && (
+          {isRegenerate && !isVirtual && (
             <View style={styles.currentRow}>
               <View style={styles.currentWrap}>
                 <View style={[styles.current, styles.previewEmpty]}>
@@ -274,7 +298,7 @@ export function AvatarGenerator({
             onPress={() => void generate()}
           >
             <Text style={styles.primaryText}>
-              {isRegenerate ? 'Redraw avatar' : isVirtual ? 'Use a virtual pet' : 'Generate'}
+              {isRegenerate ? 'Redraw avatar' : isVirtual ? `Draw ${petName}` : 'Generate'}
             </Text>
           </Pressable>
 
@@ -393,4 +417,8 @@ const styles = StyleSheet.create({
   },
   arrow: { color: colors.textFaint, fontSize: 20, marginBottom: 18 },
   error: { color: colors.drooping, fontSize: 13 },
+  description: { backgroundColor: colors.card, borderRadius: radius.md, padding: 14, gap: 4 },
+  descriptionLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted, textTransform: 'uppercase' },
+  descriptionText: { fontSize: 15, color: colors.text, lineHeight: 21 },
+  descriptionHint: { fontSize: 12, color: colors.textFaint },
 });

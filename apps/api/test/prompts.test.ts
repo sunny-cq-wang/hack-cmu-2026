@@ -26,6 +26,17 @@ describe('stylePrompt', () => {
     expect(stylePrompt('sticker', 'beagle mix')).toContain('Turn a beagle mix into');
   });
 
+  it('does not double the article when the owner already wrote one', () => {
+    // why: owner-written descriptions read either way ("shiba inu" / "a shiba inu"),
+    // and "Turn a a shiba inu into" is the kind of wording the model draws twice from.
+    expect(stylePrompt('sticker', 'a round moss-green dragon')).toContain('Turn a round moss-green dragon into');
+    expect(stylePrompt('sticker', 'an orange tabby')).toContain('Turn an orange tabby into');
+    expect(stylePrompt('sticker', 'two-tailed fox')).toContain('Turn a two-tailed fox into');
+    expect(stylePrompt('sticker', 'anteater in a raincoat')).toContain('Turn an anteater in a raincoat into');
+    expect(stylePrompt('sticker', 'amber tabby')).toContain('Turn an amber tabby into');
+    expect(stylePrompt('sticker', '  tiny space hamster  ')).toContain('Turn a tiny space hamster into');
+  });
+
   it('varies the base wording per preset', () => {
     expect(stylePrompt('watercolor', null)).toContain('watercolor storybook mascot');
     expect(stylePrompt('pixel', null)).toContain('pixel-art mascot sprite');
@@ -79,7 +90,7 @@ describe('statePrompt', () => {
     expect(statePrompt('sticker', null, 'drooping', false)).toContain('Sad droopy expression, ears lowered, slumped posture');
   });
 
-  it('adds the consistency prefix only when multiple references are sent', () => {
+  it('adds the consistency prefix when the anchor image is fed forward', () => {
     expect(statePrompt('sticker', null, 'thriving', true).startsWith(CONSISTENCY_PREFIX)).toBe(true);
     expect(statePrompt('sticker', null, 'thriving', false).startsWith(CONSISTENCY_PREFIX)).toBe(false);
   });
@@ -150,12 +161,27 @@ describe('statePrompt', () => {
 });
 
 describe('virtualDescription', () => {
-  it('prefers the owner-entered breed', () => {
-    expect(virtualDescription('Shiba Inu', 'dog')).toBe('Shiba Inu');
+  it('prefers the description the owner typed to invent the pet', () => {
+    expect(
+      virtualDescription({
+        avatarDescription: 'a round moss-green dragon with tiny gold wings',
+        breed: 'Shiba Inu',
+        species: 'virtual',
+      }),
+    ).toBe('a round moss-green dragon with tiny gold wings');
   });
 
-  it('falls back per species when breed is blank', () => {
-    expect(virtualDescription('   ', 'cat')).toBe('friendly tabby cat');
-    expect(virtualDescription(null, 'dog')).toBe('friendly medium-sized dog');
+  it('trims the description and ignores a blank one', () => {
+    expect(virtualDescription({ avatarDescription: '  tiny space hamster  ', species: 'virtual' })).toBe(
+      'tiny space hamster',
+    );
+    expect(virtualDescription({ avatarDescription: '   ', breed: 'Shiba Inu', species: 'dog' })).toBe('Shiba Inu');
+  });
+
+  it('falls back to the breed, then per species', () => {
+    expect(virtualDescription({ breed: 'Shiba Inu', species: 'dog' })).toBe('Shiba Inu');
+    expect(virtualDescription({ breed: '   ', species: 'cat' })).toBe('friendly tabby cat');
+    expect(virtualDescription({ breed: null, species: 'dog' })).toBe('friendly medium-sized dog');
+    expect(virtualDescription({ species: 'virtual' })).toBe('friendly medium-sized dog');
   });
 });

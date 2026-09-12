@@ -94,7 +94,7 @@ avatarRoutes.post('/generate', requireAuth, async (c) => {
   // Running pipelines are never disturbed — the caller just keeps polling.
   if (isPipelineRunning(petId)) return c.json({ status: 'generating', jobId: petId }, 202);
 
-  const description = source ? null : virtualDescription(pet.breed, pet.species);
+  const description = source ? null : virtualDescription(pet);
   const presetChanged = pet.avatar.stylePrompt !== '' && pet.avatar.stylePrompt !== stylePrompt(preset, description);
   const regenerate = askedToRegenerate || photoChanged || presetChanged;
 

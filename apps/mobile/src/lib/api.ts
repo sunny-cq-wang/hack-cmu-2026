@@ -54,14 +54,35 @@ export function qs(params: Record<string, string | number | boolean | undefined>
 }
 
 /**
- * Auth0 lives in a React hook, so `auth.ts` registers its token getter here on
- * mount. Null means "no session yet" and the request goes out unauthenticated.
+ * Auth0 lives in a React hook, so `auth.ts` registers its token getter here on mount.
+ * An empty registry means "no session yet" and the request goes out unauthenticated.
+ *
+ * A **list**, not a single slot, because `useAuth()` has many consumers at once —
+ * `app/index.tsx`, `useGoalReminders`, and every query hook in `queries.ts`. With one
+ * slot, each mount overwrote it and, far worse, *any* unmount nulled it for everyone
+ * still mounted. That was the "Missing bearer token" bug: `app/index.tsx` mounts,
+ * bootstraps successfully, then redirects to the next screen and unmounts — and its
+ * cleanup wiped the provider, so every request after that first navigation went out
+ * with no Authorization header even though the session was perfectly valid. Nothing
+ * re-registered it either, since the surviving consumers' effects never re-ran.
+ *
+ * Registration therefore returns its own remover, and a consumer can only ever take
+ * away the entry it added.
  */
 type AccessTokenProvider = () => Promise<string | null>;
-let accessTokenProvider: AccessTokenProvider | null = null;
+const accessTokenProviders: AccessTokenProvider[] = [];
 
-export function setAccessTokenProvider(provider: AccessTokenProvider | null): void {
-  accessTokenProvider = provider;
+export function registerAccessTokenProvider(provider: AccessTokenProvider): () => void {
+  accessTokenProviders.push(provider);
+  return () => {
+    const at = accessTokenProviders.lastIndexOf(provider);
+    if (at !== -1) accessTokenProviders.splice(at, 1);
+  };
+}
+
+/** The most recently registered getter; they are equivalent, so recency is arbitrary but stable. */
+function currentAccessTokenProvider(): AccessTokenProvider | null {
+  return accessTokenProviders[accessTokenProviders.length - 1] ?? null;
 }
 
 /**
@@ -165,7 +186,7 @@ export async function authHeaders(): Promise<Record<string, string>> {
     lastAuthHeaders = { 'x-dev-user': activeDevUser };
     return lastAuthHeaders;
   }
-  const token = await accessTokenProvider?.();
+  const token = await currentAccessTokenProvider()?.();
   lastAuthHeaders = token ? { Authorization: `Bearer ${token}` } : {};
   return lastAuthHeaders;
 }
