@@ -129,8 +129,8 @@ export function HumanScreen() {
       </Pressable>
       {isDevSession ? (
         <Text style={styles.footer}>
-          Sign out, then choose “Start onboarding” to record the first-run flow. The seeded demo
-          account stays on the server.
+          You’re in the shared demo account, so this data is everyone’s. Sign out and choose
+          “Create an account” to start a private one.
         </Text>
       ) : null}
       <Text style={styles.footer}>

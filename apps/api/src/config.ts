@@ -26,6 +26,13 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().default(3000),
   DEMO_MODE: boolFromEnv(false),
   DEV_BYPASS_AUTH: boolFromEnv(false),
+  /**
+   * The single account judges can enter without credentials, via `x-dev-user`. Unlike
+   * DEV_BYPASS_AUTH this stays on in production because the demo is the product pitch,
+   * so it is deliberately restricted to one exact address and nothing else. Clear it to
+   * switch the demo door off entirely.
+   */
+  DEMO_LOGIN_EMAIL: z.string().default('demo@petplate.app'),
   MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/petplate'),
   AUTH0_DOMAIN: z.string().default('example.us.auth0.com'),
   AUTH0_AUDIENCE: z.string().default('https://api.petplate.app'),
