@@ -13,13 +13,31 @@ export type ErrorCode =
   | 'RATE_LIMITED'
   | 'INTERNAL';
 
+const STATUS_FOR_CODE: Record<ErrorCode, number> = {
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  VALIDATION_ERROR: 400,
+  ONBOARDING_REQUIRED: 409,
+  UPSTREAM_TIMEOUT: 504,
+  UPSTREAM_ERROR: 502,
+  RATE_LIMITED: 429,
+  INTERNAL: 500,
+};
+
 export class AppError extends Error {
+  public status: number;
+
+  constructor(code: ErrorCode, status: number, message: string);
+  constructor(code: ErrorCode, message: string);
   constructor(
     public code: ErrorCode,
-    public status: number,
-    message: string,
+    statusOrMessage: number | string,
+    maybeMessage?: string,
   ) {
-    super(message);
+    const status = typeof statusOrMessage === 'number' ? statusOrMessage : STATUS_FOR_CODE[code];
+    super(typeof statusOrMessage === 'number' ? (maybeMessage ?? code) : statusOrMessage);
+    this.status = status;
     this.name = 'AppError';
   }
 }

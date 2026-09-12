@@ -47,3 +47,6 @@ feedingSchema.methods.toApi = function toApi(this: FeedingDoc): Feeding {
 
 export const FeedingModel: Model<FeedingFields> =
   mongoose.models.Feeding ?? mongoose.model<FeedingFields>('Feeding', feedingSchema);
+
+/** Short name the P3/P4 routes and services import. */
+export { FeedingModel as Feeding };

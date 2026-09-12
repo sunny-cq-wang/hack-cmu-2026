@@ -13,3 +13,6 @@ export function dayRange(key: string, tz: string): { start: Date; end: Date } {
 }
 
 export const localHour = (d: Date, tz: string): number => Number(formatInTimeZone(d, tz, 'H'));
+
+export const shiftDayKey = (key: string, days: number): string =>
+  format(addDays(parseISO(key), days), 'yyyy-MM-dd');

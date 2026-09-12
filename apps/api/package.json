@@ -8,7 +8,10 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "seed:demo": "tsx scripts/seedDemo.ts"
+    "seed:demo": "tsx scripts/seedDemo.ts",
+    "fixtures:avatar": "tsx scripts/make-fixtures.ts",
+    "scratch:imagine": "tsx scripts/scratch/imagine.ts",
+    "scratch:voice": "tsx scripts/scratch/voice.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.14.1",

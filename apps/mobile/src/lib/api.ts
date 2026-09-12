@@ -127,6 +127,16 @@ function parseOrDrift<S extends z.ZodTypeAny>(
   );
 }
 
+/**
+ * Absolute URL for a server-issued media path. The API hands back `/api/photos/<id>`
+ * from `urlFor()`, which `<Image>` and `expo-video` cannot resolve on their own.
+ */
+export function apiUrl(pathOrUrl: string): string {
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const path = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
+  return path.startsWith('/api/') ? `${config.apiBase}${path}` : `${config.apiBase}/api${path}`;
+}
+
 export async function authHeaders(): Promise<Record<string, string>> {
   if (config.devUser) {
     // Pairs with DEV_BYPASS_AUTH=true on the API (.env.example).

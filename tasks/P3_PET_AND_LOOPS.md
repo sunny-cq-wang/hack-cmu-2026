@@ -115,4 +115,49 @@ Empty states: no weigh-ins → "Add a weigh-in weekly and PetPlate will tune the
 - [ ] `pnpm typecheck` clean; no math in the mobile code (grep for `0.75`, `Math.pow`, `70 *` in `features/pet` must return nothing).
 
 ## 7. Requests to other owners / Implementation notes
-(append here)
+
+### Implementation notes (P3)
+
+Built on branch `HanielJing_PetAndLoops`.
+
+**Pure functions (tests first, 39 green):**
+- `computeHumanTargets` — BMR is **not** rounded (male 25/178/80 = **1792.5**). `baseKcal = max(round(TDEE + offset), sex floor)`. Adaptive offset clamped ±300.
+- `computePetTargets` — RER = `roundToHalf(70 × refKg^0.75)` so Biscuit is **451.5 kcal / 452 / 132 g / 66 g**. Virtual 10 kg maintain → **630 kcal**. Maintain at 12.2 kg uses current weight as refKg → **731 kcal** (the brief’s 722 is 451.5×1.6 using lose-weight RER; we follow ALGORITHMS §2.1).
+- Scoring, streak, mood, adaptive loops match P3 §2.
+- **No-pet policy:** pet section zeros, `petScore = 0`, `combined = humanScore` (not averaged with 0). `streakCounted` still needs both ≥ 70, so pet-less users never streak in MVP.
+- **RER floor vs −5% Biscuit:** lose factor 1.0 already sits on the RER floor, so `adaptivePct −5` is stored but portion stays 132 g. Documented for the 14.0→13.7 demo: the −5% flag applies; grams will not drop to 125 until kcal is above RER (e.g. maintain or higher MER).
+
+**How to test:**
+```
+npx pnpm@9.15.9 --filter @petplate/shared build
+npx pnpm@9.15.9 --filter api test          # 39 specs
+# API (needs MONGODB_URI + DEV_BYPASS_AUTH=true):
+npx pnpm@9.15.9 --filter api dev
+curl -H "x-dev-user: demo@petplate.app" -H "Content-Type: application/json" \
+  -d '{"name":"Biscuit","species":"dog","neutered":true,"weightKg":14,"idealWeightKg":12,"food":{"name":"Blue Buffalo Adult","kcalPerCup":377,"gramsPerCup":110}}' \
+  http://localhost:3000/api/pets
+```
+Expect `targets.kcal: 452`, `portionGramsPerDay: 132`, `mealsPerDay: 2`.
+
+**Stubs (P2 replaces):** `config.ts`, `lib/auth.ts` (DEV_BYPASS + `x-dev-user` only, no JWT), `lib/errors.ts`, `lib/day.ts` (real date-fns-tz), `lib/log.ts`, `db/connect.ts`, models, `services/today.ts`, `src/index.ts` mounts only P3 routes + `/api/health`.
+
+**Mobile:** `PetForm` / `PetScreen` exported from `apps/mobile/src/features/pet`. Local `api.ts` until P1’s client exists. WeightChart is RN dots + ideal line (Expo/Victory not scaffolded). Grep `0.75` / `Math.pow` / `70 *` in `features/pet` is empty.
+
+**Stretch skipped:** multi-feeding countdown, 7-day score bar, cat-mode copy.
+
+### Requests to other owners
+
+**P2**
+- Mount `petsRoutes`, `weighinsRoutes`, `scoresRoutes` under `/api` (already done in the stub `index.ts`; keep them when you replace the boot file).
+- Import `recomputeDay` / `buildDailyScore` from `services/scoring` after meals writes.
+- Import `computeHumanTargets` from `services/targets/human` on `PUT /me/profile`.
+- `buildToday` should call `recomputeDay` when today’s `dailyScores` row is missing (stub currently reads only).
+- Replace auth JWT, models `toApi` typing, Mongo boot. Keep `targets.adjustmentLog` (cap 10) on user and pet — P3 writes it.
+- Seed script: use `computeHumanTargets`, `computePetTargets`, `recomputeDay` per DATA_MODEL §10.
+
+**P1**
+- Replace `features/pet/api.ts` with `import { api } from '../../lib/api'`.
+- Mount `<PetForm onSaved={...} />` on onboarding/pet and `<PetScreen />` on `(tabs)/pet`.
+- After feed/weigh-in, P3 already writes `['today']` (feed) / refetches today (weigh-in). Keep that cache key.
+- Swap WeightChart to Victory Native when the Expo app has `victory-native`.
+

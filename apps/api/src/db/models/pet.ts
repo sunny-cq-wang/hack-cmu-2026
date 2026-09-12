@@ -135,3 +135,6 @@ petSchema.methods.toApi = function toApi(this: PetDoc): Pet {
 
 export const PetModel: Model<PetFields> =
   mongoose.models.Pet ?? mongoose.model<PetFields>('Pet', petSchema);
+
+/** Short name the P3/P4 routes and services import. */
+export { PetModel as Pet };

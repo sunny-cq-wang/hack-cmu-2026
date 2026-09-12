@@ -56,3 +56,6 @@ dailyScoreSchema.methods.toApi = function toApi(this: DailyScoreDoc): DailyScore
 
 export const DailyScoreModel: Model<DailyScoreFields> =
   mongoose.models.DailyScore ?? mongoose.model<DailyScoreFields>('DailyScore', dailyScoreSchema);
+
+/** Short name the P3/P4 routes and services import. */
+export { DailyScoreModel as DailyScore };

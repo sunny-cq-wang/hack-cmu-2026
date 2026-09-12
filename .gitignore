@@ -13,13 +13,24 @@ build/
 .expo-shared/
 apps/mobile/ios/
 apps/mobile/android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# scratch verification output (may contain generated media)
+apps/api/scripts/scratch/out/
+.tmp/
 
 *.log
 npm-debug.log*
+pnpm-debug.log*
 yarn-error.log*
 
 .DS_Store
 Thumbs.db
+*.swp
 
 .turbo
 coverage/

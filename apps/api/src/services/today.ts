@@ -1,6 +1,7 @@
 import {
   TodaySummarySchema,
   emptyNutrients,
+  type AvatarInfo,
   type TodaySummary,
 } from '@petplate/shared';
 import {
@@ -11,11 +12,26 @@ import {
   FeedingModel,
   type AdjustmentLogEntry,
 } from '../db/models';
+import type { PetRecord } from '../db/types';
 import { photoUrl } from '../db/models/helpers';
 import { dayKey } from '../lib/day';
 import { AppError } from '../lib/errors';
 import { sumNutrients } from './nutrition/enrich';
+import { urlFor } from './photos';
 import { recomputeDay } from './scoring';
+
+/** The avatar pipeline reads pets through the record store, not the Mongoose doc. */
+export function petAvatarToInfo(pet: PetRecord | null): AvatarInfo | null {
+  if (!pet) return null;
+  return {
+    status: pet.avatar.status,
+    neutralUrl: pet.avatar.neutralPhotoId ? urlFor(pet.avatar.neutralPhotoId) : null,
+    thrivingUrl: pet.avatar.thrivingPhotoId ? urlFor(pet.avatar.thrivingPhotoId) : null,
+    droopingUrl: pet.avatar.droopingPhotoId ? urlFor(pet.avatar.droopingPhotoId) : null,
+    celebrationVideoUrl: pet.avatar.celebrationVideoUrl,
+    voice: pet.avatar.voice,
+  };
+}
 
 export async function buildToday(userId: string): Promise<TodaySummary> {
   const user = await UserModel.findById(userId);
@@ -102,4 +118,23 @@ export async function buildToday(userId: string): Promise<TodaySummary> {
       : null,
     adjustments,
   });
+}
+
+/** Compact context handed to the voice agent (P4 task file §6). */
+export interface CompactToday {
+  kcalRemaining: number;
+  proteinRemaining: number;
+  petFedGrams: number;
+  petTargetGrams: number;
+  topGaps: { label: string; pct: number }[];
+}
+
+export function compactFromToday(today: TodaySummary, topGaps: { label: string; pct: number }[]): CompactToday {
+  return {
+    kcalRemaining: Math.max(0, Math.round(today.human.targets.kcal - today.human.consumed.kcal)),
+    proteinRemaining: Math.max(0, Math.round(today.human.targets.proteinG - today.human.consumed.proteinG)),
+    petFedGrams: Math.round(today.pet?.fedGrams ?? 0),
+    petTargetGrams: Math.round(today.pet?.targetGrams ?? 0),
+    topGaps,
+  };
 }
