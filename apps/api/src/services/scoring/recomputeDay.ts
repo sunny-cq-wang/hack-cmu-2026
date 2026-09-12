@@ -13,6 +13,7 @@ import { AppError } from '../../lib/errors';
 import { dayKey, localHour, shiftDayKey } from '../../lib/day';
 import { avatarStateFor, combinedScore, expectedFrac, humanScore, moodFor, pacedScore, petScore } from './score';
 import { streakLength } from './streak';
+import { callToApi } from '../../db/models/serialize';
 
 export type BuildDailyScoreInput = {
   dayKey: string;
@@ -117,7 +118,7 @@ export async function recomputeDay(userId: string, forDayKey: string): Promise<{
   })
     .sort({ dayKey: -1 })
     .limit(60);
-  const priorRows = priorDocs.map((d) => d.toApi());
+  const priorRows = priorDocs.map((d) => callToApi<DailyScore>(d));
   const previous = priorRows.find((r) => r.dayKey === forDayKey) ?? null;
 
   const hour = forDayKey === todayKey ? localHour(new Date(), tz) : null;

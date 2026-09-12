@@ -22,7 +22,7 @@ export function computeBmr(profile: Pick<HumanProfile, 'sex' | 'age' | 'heightCm
 }
 
 export function microsFor(sex: HumanProfile['sex'], age: number): Partial<Nutrients> {
-  const table = { ...DRI_TABLE[sex] };
+  const table: Partial<Nutrients> = { ...DRI_TABLE[sex] };
   if (age > 50) {
     table.calciumMg = DRI_AGE_OVER_50.calciumMg;
     table.vitaminDUg = DRI_AGE_OVER_50.vitaminDUg;

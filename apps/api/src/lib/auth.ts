@@ -28,7 +28,7 @@ export const authMiddleware: MiddlewareHandler<{ Variables: AuthVars }> = async 
     }
     c.set('userId', String(user._id));
     c.set('auth0Sub', user.auth0Sub);
-    c.set('user', user as UserDoc);
+    c.set('user', user as unknown as UserDoc);
     await next();
     return;
   }
