@@ -5,10 +5,10 @@
  *
  * Everything on screen is read from `GET /me/today`. `useToday()` already refetches on
  * window focus, so coming back from the Log tab shows the new score without a manual
- * refresh (see `src/lib/queries.ts`).
+ * refresh (see `src/lib/queries.ts`). Pull-to-refresh is the explicit override.
  */
 import type { TodaySummary } from '@petplate/shared';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button, Card, Skeleton, colors, radius, spacing, typography } from '../../src/components/ui';
 import { PetAvatar } from '../../src/features/avatar';
@@ -24,7 +24,20 @@ export default function HomeTab(): React.JSX.Element {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={today.isRefetching}
+            onRefresh={() => {
+              void today.refetch();
+            }}
+            tintColor={colors.thriving}
+            colors={[colors.thriving]}
+          />
+        }
+      >
         {/* 1 — P4's avatar; it reads `useToday()` itself and owns its own loading state. */}
         <PetAvatar size={AVATAR_SIZE} />
 
