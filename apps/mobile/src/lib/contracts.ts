@@ -10,13 +10,25 @@
 import {
   DailyScoreSchema,
   FeedingSchema,
+  HumanProfileSchema,
+  MealCreateSchema,
   MealPlanSchema,
   MealSchema,
+  PetInputSchema,
   PetSchema,
   TodaySummarySchema,
   UserSchema,
 } from '@petplate/shared';
 import { z } from 'zod';
+
+/**
+ * Request types as a *caller* writes them: the pre-`.default()` shape of the shared
+ * schemas, so a form does not have to spell out every defaulted field. The schema
+ * still fills the gaps and validates at the boundary.
+ */
+export type MealCreateInput = z.input<typeof MealCreateSchema>;
+export type PetFormInput = z.input<typeof PetInputSchema>;
+export type HumanProfileInput = z.input<typeof HumanProfileSchema>;
 
 /** `POST /me/bootstrap`, `PUT /me/profile` */
 export const UserResponseSchema = z.object({ user: UserSchema });

@@ -34,8 +34,12 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
-export type ApiInit<T> = Omit<RequestInit, 'signal'> & {
-  schema: z.ZodType<T>;
+/**
+ * Generic over the *schema*, not its output: several shared schemas use `.default()`,
+ * so their input and output types differ and `z.ZodType<T>` would infer the wrong one.
+ */
+export type ApiInit<S extends z.ZodTypeAny> = Omit<RequestInit, 'signal'> & {
+  schema: S;
   /** `body` is a `FormData`; let fetch pick the multipart boundary itself. */
   multipart?: boolean;
   timeoutMs?: number;
@@ -98,7 +102,12 @@ function codeForStatus(status: number): ApiErrorCode {
   }
 }
 
-function parseOrDrift<T>(path: string, schema: z.ZodType<T>, payload: unknown, status: number): T {
+function parseOrDrift<S extends z.ZodTypeAny>(
+  path: string,
+  schema: S,
+  payload: unknown,
+  status: number,
+): z.infer<S> {
   const parsed = schema.safeParse(payload);
   if (parsed.success) {
     return parsed.data;
@@ -127,7 +136,7 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export async function api<T>(path: string, init: ApiInit<T>): Promise<T> {
+export async function api<S extends z.ZodTypeAny>(path: string, init: ApiInit<S>): Promise<z.infer<S>> {
   const { schema, multipart = false, timeoutMs = DEFAULT_TIMEOUT_MS, headers, ...rest } = init;
   const method = (rest.method ?? 'GET').toUpperCase();
 
