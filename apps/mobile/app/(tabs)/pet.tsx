@@ -1,16 +1,3 @@
-// STUB — P1 hands this over; it becomes a re-export of `PetScreen` from features/pet (P3).
-import { SafeAreaView, StyleSheet, Text } from 'react-native';
-
-import { colors, spacing, typography } from '../../src/components/ui';
-
-export default function PetTab(): React.JSX.Element {
-  return (
-    <SafeAreaView style={styles.screen}>
-      <Text style={typography.heading}>Pet</Text>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, backgroundColor: colors.bg },
-});
+// The Pet tab is P3's screen; this route only mounts it (tasks/P1_MOBILE_CORE.md §4).
+// `features/pet` is a P1 placeholder until P3 drops the real file in its place.
+export { PetScreen as default } from '../../src/features/pet';

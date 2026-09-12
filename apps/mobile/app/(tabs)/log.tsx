@@ -6,10 +6,10 @@
  * single `setState` in this file; the feature components only report events.
  */
 import type { MealDraft } from '@petplate/shared';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button, colors, radius, spacing, typography } from '../../src/components/ui';
@@ -64,20 +64,34 @@ export default function LogTab(): React.JSX.Element {
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Bumped on every new analysis and on cancel, so a request the user walked away
+  // from cannot drag them back into `reviewing` when it finally resolves.
+  const analysisId = useRef(0);
+
   // analyzing → reviewing, both ways.
   const startAnalysis = useCallback(
     (photoUri: string) => {
+      analysisId.current += 1;
+      const requestId = analysisId.current;
       setCaptureError(null);
       setSaveError(null);
       setState({ status: 'analyzing', photoUri });
       analyzeMeal.mutate(
         { uri: photoUri },
         {
-          onSuccess: (draft) => setState({ status: 'reviewing', photoUri, draft, notice: null }),
+          onSuccess: (draft) => {
+            if (analysisId.current !== requestId) {
+              return;
+            }
+            setState({ status: 'reviewing', photoUri, draft, notice: null });
+          },
           onError: (cause) => {
             log.warn('meals', 'analyze failed — falling back to a manual draft', {
               code: isApiError(cause) ? cause.code : 'UNKNOWN',
             });
+            if (analysisId.current !== requestId) {
+              return;
+            }
             setState({ status: 'reviewing', photoUri, draft: emptyDraft(), notice: analyzeNotice(cause) });
           },
         },
@@ -114,6 +128,7 @@ export default function LogTab(): React.JSX.Element {
   };
 
   const cancel = (): void => {
+    analysisId.current += 1;
     setSaveError(null);
     setState({ status: 'idle' });
   };
