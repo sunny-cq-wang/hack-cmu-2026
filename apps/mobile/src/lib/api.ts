@@ -127,13 +127,27 @@ function parseOrDrift<S extends z.ZodTypeAny>(
   );
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
+export async function authHeaders(): Promise<Record<string, string>> {
   if (config.devUser) {
     // Pairs with DEV_BYPASS_AUTH=true on the API (.env.example).
     return { 'x-dev-user': config.devUser };
   }
   const token = await accessTokenProvider?.();
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** Query-string twin of `authHeaders` for `expo-image`, which cannot send custom headers. */
+export function photoAuthQuery(headers: Record<string, string>): string {
+  const params = new URLSearchParams();
+  if (headers['x-dev-user']) {
+    params.set('devUser', headers['x-dev-user']);
+  }
+  const bearer = headers.Authorization;
+  if (bearer?.startsWith('Bearer ')) {
+    params.set('access_token', bearer.slice('Bearer '.length));
+  }
+  const encoded = params.toString();
+  return encoded ? `?${encoded}` : '';
 }
 
 export async function api<S extends z.ZodTypeAny>(path: string, init: ApiInit<S>): Promise<z.infer<S>> {

@@ -2,11 +2,11 @@
 import type { Meal } from '@petplate/shared';
 import { Image } from 'expo-image';
 import { UtensilsCrossed } from 'lucide-react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Button, Card, Skeleton, colors, radius, spacing, typography } from '../../components/ui';
-import { isApiError } from '../../lib/api';
+import { authHeaders, isApiError, photoAuthQuery } from '../../lib/api';
 import { config } from '../../lib/config';
 import { useDeleteMeal, useMeals } from '../../lib/queries';
 import { SwipeToDelete } from './SwipeToDelete';
@@ -18,11 +18,12 @@ export interface MealListProps {
 }
 
 /** `Meal.photoUrl` comes back as an API-relative path (`/api/photos/:id`). */
-function photoSource(photoUrl: string | null): string | null {
+function photoSource(photoUrl: string | null, query: string): string | null {
   if (!photoUrl) {
     return null;
   }
-  return /^https?:\/\//i.test(photoUrl) ? photoUrl : `${config.apiBase}${photoUrl}`;
+  const uri = /^https?:\/\//i.test(photoUrl) ? photoUrl : `${config.apiBase}${photoUrl}`;
+  return `${uri}${query}`;
 }
 
 function loggedAtLabel(meal: Meal): string {
@@ -33,6 +34,19 @@ export function MealList({ dayKey }: MealListProps): React.JSX.Element {
   const meals = useMeals(dayKey);
   const deleteMeal = useDeleteMeal();
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [photoQuery, setPhotoQuery] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void authHeaders().then((headers) => {
+      if (!cancelled) {
+        setPhotoQuery(photoAuthQuery(headers));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const remove = (mealId: string): void => {
     setDeleteError(null);
@@ -74,7 +88,7 @@ export function MealList({ dayKey }: MealListProps): React.JSX.Element {
     <View style={styles.list}>
       {deleteError ? <Text style={styles.error}>{deleteError}</Text> : null}
       {meals.data.map((meal) => {
-        const uri = photoSource(meal.photoUrl);
+        const uri = photoSource(meal.photoUrl, photoQuery);
         return (
           <SwipeToDelete key={meal.id} onDelete={() => remove(meal.id)} disabled={deleteMeal.isPending}>
             <Card style={styles.row}>

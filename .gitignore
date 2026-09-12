@@ -20,3 +20,8 @@ yarn-error.log*
 
 .DS_Store
 Thumbs.db
+
+.turbo
+coverage/
+.vscode/
+.idea/
